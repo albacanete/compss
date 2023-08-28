@@ -1,11 +1,11 @@
 #!/bin/bash
 
 function ERROR {
-    echo -e "\\e[91m [  RUNCOMPSS-DOCKER  ]: [  ERROR  ]: $1 \\e[0m" 
+    echo -e "\\e[91m [  RUNCOMPSS-K8S  ]: [  ERROR  ]: $1 \\e[0m" 
 }
 
 function ECHO {
-    echo -e "\\e[32m [  RUNCOMPSS-DOCKER  ]: $1 \\e[0m"
+    echo -e "\\e[32m [  RUNCOMPSS-K8S  ]: $1 \\e[0m"
 }
 
 function ASSERT {
