@@ -110,10 +110,7 @@ spec:
       containers:
       - name: worker
         image: ${IMAGE_NAME}
-        args: ["runcompss"]
-        env:
-        - name: RUNCOMPSS_ARGS
-          value: "${RUNCOMPSS_ARGS}"
+        command: /bin/bash -c \"/usr/sbin/sshd -D \"
         resources:
           limits:
             cpu: "${COMPUTING_UNITS}"

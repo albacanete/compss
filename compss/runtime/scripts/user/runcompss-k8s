@@ -5,8 +5,8 @@
 #
 DOCKER_DEFAULT_PORT=2376
 DOCKER_DEFAULT_PROTOCOL="tcp"
-GENERATORS_DIR=$(dirname "$0")/../system/docker/
-GENERATE_COMPOSE_YML=$GENERATORS_DIR/generate-compose-yml
+GENERATORS_DIR=$(dirname "$0")/../system/k8s/
+GENERATE_DEPLOYMENT_YML=$GENERATORS_DIR/generate-deployment-yml
 DEFAULT_MEM=4
 DEFAULT_CU=1
 DEFAULT_ELASTIC=0
@@ -21,10 +21,10 @@ source "$GENERATORS_DIR/aux_functions.sh"
 
 showHelp() {
   echo -e "
-::::::::::::::: [  RUNCOMPSS-DOCKER  -  HELP  ] ::::::::::::::::::::::
+::::::::::::::: [  RUNCOMPSS-K8S  -  HELP  ] ::::::::::::::::::::::
 
-First of all, remember that in order to use runcompss-docker you must have a working docker swarm,
-and you need to have installed in this computer the docker engine.
+First of all, remember that in order to use runcompss-k8s you must have a working Kubernetes cluster,
+and you need to have installed and configured in this computer the kubectl CLI.
 
 Usage: $0
             --worker-containers=N
@@ -75,19 +75,21 @@ OPTIONAL ARGUMENTS:
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 "
 }
+
 get_master_hostname_ip(){
     master_hostname=$(docker stack ps ${IMG_NAME_WITHOUT_USERNAME}-docker | grep ${IMG_NAME_WITHOUT_USERNAME}-docker_master | awk '{ print $4 }' | xargs)
     master_ip=$(docker node inspect -f "{{print .Status.Addr}}" ${master_hostname})
 }
-
 
 get_master_status(){
     wait_before=$1
     if [ -n ${wait_before} ]; then
       sleep ${wait_before}
     fi 
+    # in k8s kubectl get pods, the status is the 3rd column
     master_status=$(docker stack ps ${IMG_NAME_WITHOUT_USERNAME}-docker | grep ${IMG_NAME_WITHOUT_USERNAME}-docker_master | awk '{ print $5 }' | xargs)
 }
+
 retrieveResults() {
     cd "${TMP_DIR}/.."
 
@@ -197,6 +199,7 @@ then
     exit 2
 fi
 
+# If any required argument is missing, the ALL_GOOD variable is set to 0
 ALL_GOOD=1
 if [ -z "$NUM_WORKER_CONTAINERS" ]; then
     ERROR "Indicate the number of workers before runcompss args ('--worker-containers=3' for example)"
@@ -218,47 +221,50 @@ if [ -z "$ABS_CONTEXT" ]; then
     ALL_GOOD=0
 fi
 
+# Required argument missing
 if [ "$ALL_GOOD" = "0" ]; then
     echo
-    ECHO "Run 'runcompss-docker --help' if you need help."
+    ECHO "Run 'runcompss-k8s --help' if you need help."
     echo
     exit 1
 fi
+
 IMG_NAME_WITHOUT_USERNAME="$(echo "$IMAGE_NAME" | sed -e 's|[A-Za-z0-9_]*/||g'| sed -e 's|[:.]|_|g')"
 # Regular workflow
-TMP_DIR="$PWD/${IMG_NAME_WITHOUT_USERNAME}-compose"
+# The temporary directory for generating the k8s YAML files
+TMP_DIR="$PWD/${IMG_NAME_WITHOUT_USERNAME}-yml"
 rm -rf "$TMP_DIR" &> /dev/null
 mkdir "$TMP_DIR" &> /dev/null
 
-ECHO "Generating docker-compose.yml file into '${TMP_DIR}' ..." ; echo
-$GENERATE_COMPOSE_YML "$NUM_WORKER_CONTAINERS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$SWARM_MANAGER_IP" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/docker-compose.yml
-ASSERT "There was an error creating the docker compose yml file."
+ECHO "Generating deployments.yml file into '${TMP_DIR}' ..." ; echo
+$GENERATE_DEPLOYMENT_YML "$NUM_WORKER_CONTAINERS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$SWARM_MANAGER_IP" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yml
+ASSERT "There was an error creating the Kubernetes deployments YAML file."
 
 # Add trap for results retrieval
 trap "retrieveResults ; exit 1" SIGINT ERR
 
 ECHO "Cleaning environment from previous executions..." ; echo
-# docker-compose down --remove-orphans
-docker stack rm ${IMG_NAME_WITHOUT_USERNAME}-docker
-# Sometimes, although the stack is removed, the previously stopped containers remain.
-# The next command is to delete all previous containers.
-RESIDUAL_CONTAINERS=$(docker ps -a | grep ${IMG_NAME_WITHOUT_USERNAME}-docker | awk '{ print $1 }' | xargs)
-if [ ! -z "$RESIDUAL_CONTAINERS" ]; then
-    docker rm -f $RESIDUAL_CONTAINERS > /dev/null
+# Delete master and workers deployments
+kubectl delete deployment ${IMG_NAME_WITHOUT_USERNAME}-master
+kubectl delete deployment ${IMG_NAME_WITHOUT_USERNAME}-worker
+# Sometimes, although the deployment is removed, the previously stopped pods remain.
+# The next command is to delete all previous pods.
+RESIDUAL_PODS=$(kubectl get pods | grep ${IMG_NAME_WITHOUT_USERNAME} | awk '{ print $1 }' | xargs))
+if [ ! -z "$RESIDUAL_PODS" ]; then
+    docker rm -f $RESIDUAL_PODS > /dev/null
 fi
-#docker network runcompssdocker_runcompss-docker-net down
 ASSERT "There was an error cleaning the environment from previous executions."
 echo
 
 ECHO "Waiting some seconds for the deletions to take effect"
 sleep 5
 
-ECHO "Executing application in swarm manager..." ; echo
-# docker-compose up --force-recreate
-docker stack deploy -c ${TMP_DIR}/docker-compose.yml ${IMG_NAME_WITHOUT_USERNAME}-docker
-#docker-compose scale master=1 worker=$NUM_WORKER_CONTAINERS #--force-recreate
+ECHO "Executing application in Kubernetes cluster..." ; echo
+# Deploy compss deployments and service
+kubectl apply -f ${TMP_DIR}/deployments.yml
 ASSERT "There was an error executing the application. Check the logs or the docker-compose output."
 echo
+
 ECHO "Waiting application to finish..."
 get_master_status 5
 while [[ "${master_status}" == "Running" ]]; do
