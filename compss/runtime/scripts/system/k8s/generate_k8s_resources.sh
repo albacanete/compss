@@ -15,8 +15,7 @@ resources_file=$1
 num_workers=$2
 cus=$3
 memory=$4
-# TODO: check kubernetes needed vars
-swarm_manager_ip=$5
+compss_master_ip=$5
 image_name=$6
 cloud=$7
 creation_time=$8
@@ -37,7 +36,7 @@ if [ "${cloud}" == "True" ]; then
   echo "Adding cloud ..."
   its="small:1:0:0:2.0:1:0.85 medium:2:0:0:3.0:1:0.95 large:4:0:0:4.0:1:1.25 extra_large:8:0:0:8.0:1:2.25"
   # TODO: change add_cloud for Kubernetes
-  add_cloud "K8s" "tcp://$swarm_manager_ip" "k8s-conn.jar" "es.bsc.conn.k8s.K8s" "$image_name" "" "$creation_time" "43000" "43003" "" "${its}"
+  add_cloud "K8s" "tcp://$compss_master_ip" "k8s-conn.jar" "es.bsc.conn.k8s.K8s" "$image_name" "" "$creation_time" "43000" "43003" "" "${its}"
 fi
 # Close resources (from generate_resources.sh)
 add_footer

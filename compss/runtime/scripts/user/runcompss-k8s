@@ -28,14 +28,14 @@ and you need to have installed and configured in this computer the kubectl CLI.
 
 Usage: $0
             --worker-containers=N
-            --swarm-manager='<ip>:<port>'
+            --compss-master=<hostname>
             --image-name=\"DOCKERHUB_USER/IMG-NAME\"
 			[rest of classic runcompss args]
 
 Example: $0
             --worker-containers=5
             --image-name='compss-user-dockerhub/my-app:1.3'
-            --swarm-manager='129.114.108.8:4000'
+            --compss-master=nano1
             --classpath=/home/compss-user/my-app-dir/my-app.jar # Here begin classic runcompss arguments...
             -d
             myPackage.MyApp 3 15
@@ -51,12 +51,12 @@ MANDATORY ARGUMENTS:
                                Remember as well that the format must be: \"DOCKERHUB_USERNAME/APP_IMAGE_NAME:TAG\" (the :TAG is optional).
                                Example: --image-name='john123/my-compss-application:1.9'
 
-    --s, --swarm-manager:      Specify the swarm manager ip and port (format:  <ip>:<port>).
-                               Example: --swarm-manager='129.114.108.8:4000'
+    --n, --compss-master:      Specify the hostname of the Kubernetes node where the COMPSs master will run as pod.
+                               Example: --compss-master=nano1
 
     --c, --context-dir:        Specify the absolute application context directory inside the image.
 	            		       When using an application image, its provider must give you this information.
-                               Example: --swarm-manager='129.114.108.8:4000'
+                               Example: --context-dir='/home/compss-user/my-app-dir'
 
 OPTIONAL ARGUMENTS:
 
@@ -77,8 +77,8 @@ OPTIONAL ARGUMENTS:
 }
 
 get_master_hostname_ip(){
-    master_hostname=$(docker stack ps ${IMG_NAME_WITHOUT_USERNAME}-docker | grep ${IMG_NAME_WITHOUT_USERNAME}-docker_master | awk '{ print $4 }' | xargs)
-    master_ip=$(docker node inspect -f "{{print .Status.Addr}}" ${master_hostname})
+    # The 6th column of the kubectl command is the pod IP
+    COMPSS_MASTER_IP=$(kubectl get pods -o wide | grep ${IMG_NAME_WITHOUT_USERNAME}-docker_master | awk '{ print $6 }' | xargs)
 }
 
 get_master_status(){
@@ -87,10 +87,10 @@ get_master_status(){
       sleep ${wait_before}
     fi 
     # in k8s kubectl get pods, the status is the 3rd column
-    master_status=$(docker stack ps ${IMG_NAME_WITHOUT_USERNAME}-docker | grep ${IMG_NAME_WITHOUT_USERNAME}-docker_master | awk '{ print $5 }' | xargs)
+    master_status=$(kubectl get pods | grep ${IMG_NAME_WITHOUT_USERNAME}-docker_master | awk '{ print $3 }' | xargs)
 }
 
-retrieveResults() {
+retrieve_results() {
     cd "${TMP_DIR}/.."
 
     ECHO "Retrieving results from master..."
@@ -101,19 +101,18 @@ retrieveResults() {
     DEBUG_DIR="$RESULTS_DIR/debug"
     rm -rf "$RESULTS_DIR" &> /dev/null
     mkdir -p "$DEBUG_DIR"
-    get_master_hostname_ip
-    # We obtain Master container hash id by grepping the *_master container from a docker ps on the swarm manager.
-    export DOCKER_HOST="${DOCKER_DEFAULT_PROTOCOL}://${master_ip}:${DOCKER_DEFAULT_PORT}"
- 
-    DOCKER_CONTAINER_MASTER_HASH=$(docker ps -a | grep "${IMG_NAME_WITHOUT_USERNAME}-docker_master" | awk '{ print $1 }')
-    docker cp "${DOCKER_CONTAINER_MASTER_HASH}:${ABS_CONTEXT}" "${RESULTS_DIR}" ;
-    ASSERT "Results could not be retrieved...Master container unreachable"
+
+    # Get master pod name
+    MASTER_POD_NAME=$(kubectl get pods | grep ${IMG_NAME_WITHOUT_USERNAME}-docker_master | awk '{ print $1 }' | xargs)
+    kubectl cp "${MASTER_POD_NAME}:${ABS_CONTEXT}" "${RESULTS_DIR}" ;
+    ASSERT "Results could not be retrieved...Master Pod unreachable"
   
-    docker cp "${DOCKER_CONTAINER_MASTER_HASH}:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
-    #ASSERT "Results could not be retrieved...Master container unreachable"
+    kubectl cp "${MASTER_POD_NAME}:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
+    ASSERT "Results could not be retrieved...Master Pod unreachable"
     
-    docker logs ${DOCKER_CONTAINER_MASTER_HASH} 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
-    # No .COMPSs hidden directory
+    # Get logs
+    kubectl logs ${MASTER_POD_NAME} 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err    # No .COMPSs hidden directory
+    
     mv "${DEBUG_DIR}"/.COMPSs/* "${DEBUG_DIR}"
     rm -rf "${DEBUG_DIR}"/.COMPSs
 
@@ -152,9 +151,9 @@ for ARG in "${ALL_ARGS[@]}"; do
     elif [ "$argName" = "image-name" ] || [ "$argName" = "i" ]; then
     	IMAGE_NAME="$argValue"
         RD_GOOD_ARG=1
-    elif [ "$argName" = "swarm-manager" ] || [ "$argName" = "s" ]; then
-        export DOCKER_HOST="$argValue" #<ip>:<port>
-        SWARM_MANAGER_IP="$argValue"
+    elif [ "$argName" = "compss-master" ] || [ "$argName" = "s" ]; then
+        # export DOCKER_HOST="$argValue" #<ip>:<port>
+        COMPSS_MASTER_HOSTNAME="$argValue"
         RD_GOOD_ARG=1
     elif [ "$argName" = "context-dir" ] || [ "$argName" = "c" ]; then
         ABS_CONTEXT="$argValue"
@@ -181,14 +180,14 @@ done
 
 # Log parameters
 ECHO "Execution summary -----------------"
-ECHO "Contatiner cpu units: $COMPUTING_UNITS"
-ECHO "Container memory:     $MEMORY GB"
-ECHO "Image name:           $IMAGE_NAME"
-ECHO "Number of workers:    $NUM_WORKER_CONTAINERS"
-ECHO "Swarm manager ip:     $SWARM_MANAGER_IP"
-ECHO "Context directory:    $ABS_CONTEXT"
-ECHO "Creation time:        $CREATION_TIME"
-ECHO "Elastic Containers:   $MAX_VMS"
+ECHO "Contatiner cpu units:     $COMPUTING_UNITS"
+ECHO "Container memory:         $MEMORY GB"
+ECHO "Image name:               $IMAGE_NAME"
+ECHO "Number of workers:        $NUM_WORKER_CONTAINERS"
+ECHO "COMPSs master hostname:   $COMPSS_MASTER_HOSTNAME"
+ECHO "Context directory:        $ABS_CONTEXT"
+ECHO "Creation time:            $CREATION_TIME"
+ECHO "Elastic Containers:       $MAX_VMS"
 ECHO "-----------------------------------"
 ECHO ""
 
@@ -206,8 +205,8 @@ if [ -z "$NUM_WORKER_CONTAINERS" ]; then
     ALL_GOOD=0
 fi
 
-if [ -z "$SWARM_MANAGER_IP" ]; then
-    ERROR "Indicate the swarm manager <ip>:<port> before runcompss args ('--swarm-manager-name=129.116.120.45:4000' for example)"
+if [ -z "$COMPSS_MASTER_HOSTNAME" ]; then
+    ERROR "Indicate the hostname of the Kubernetes node where the COMPSs master will run before runcompss args ('--compss-master=nano1 for example)"
     ALL_GOOD=0
 fi
 
@@ -237,11 +236,13 @@ rm -rf "$TMP_DIR" &> /dev/null
 mkdir "$TMP_DIR" &> /dev/null
 
 ECHO "Generating deployments.yml file into '${TMP_DIR}' ..." ; echo
-$GENERATE_DEPLOYMENT_YML "$NUM_WORKER_CONTAINERS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$SWARM_MANAGER_IP" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yml
+# get master IP from hostname
+get_master_hostname_ip
+$GENERATE_DEPLOYMENT_YML "$NUM_WORKER_CONTAINERS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$COMPSS_MASTER_IP" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yml
 ASSERT "There was an error creating the Kubernetes deployments YAML file."
 
 # Add trap for results retrieval
-trap "retrieveResults ; exit 1" SIGINT ERR
+trap "retrieve_results ; exit 1" SIGINT ERR
 
 ECHO "Cleaning environment from previous executions..." ; echo
 # Delete master and workers deployments
@@ -271,6 +272,6 @@ while [[ "${master_status}" == "Running" ]]; do
 	get_master_status 5
 done
 ECHO "Application finished!"
-retrieveResults
+retrieve_results
 exit 0
 
