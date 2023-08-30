@@ -52,24 +52,22 @@ echo -e "\
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ${IMG_NAME_WITHOUT_USERNAME}-master
+  name: master
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${IMG_NAME_WITHOUT_USERNAME}-master
-      role: master
+      app: compss-master
   template:
     metadata:
       labels:
-        app: ${IMG_NAME_WITHOUT_USERNAME}-master
-        role: master
+        app: compss-master
     spec:
       nodeSelector: 
         kubernetes.io/hostname: ${COMPSS_MASTER_HOSTNAME}
       containers:
-      - name: master
-        image: ${IMAGE_NAME}
+      - name: compss-master
+        image: ${APP_IMAGE_NAME}
         command:
           - ${master_command}
 "
@@ -79,10 +77,10 @@ echo -e "\
 apiVersion: v1
 kind: Service
 metadata:
-  name: ${IMG_NAME_WITHOUT_USERNAME}-master
+  name: compss-master
 spec:
   selector:
-    app: ${IMG_NAME_WITHOUT_USERNAME}-master
+    app: compss-master
   ports:
     - protocol: TCP
       port: 22
@@ -94,18 +92,16 @@ echo -e "\
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ${IMG_NAME_WITHOUT_USERNAME}-worker
+  name: compss-worker
 spec:
   replicas: ${NUM_WORKER_CONTAINERS}
   selector:
     matchLabels:
-      app: ${IMG_NAME_WITHOUT_USERNAME}-worker
-      role: worker
+      app: compss-worker
   template:
     metadata:
       labels:
-        app: ${IMG_NAME_WITHOUT_USERNAME}-worker
-        role: worker
+        app: compss-worker
     spec:
       # Ensure only one worker pod per node
       affinity:
@@ -126,7 +122,7 @@ spec:
                     - ${COMPSS_MASTER_HOSTNAME}
       containers:
       - name: worker
-        image: ${IMAGE_NAME}
+        image: ${APP_IMAGE_NAME}
         command:
             - "/bin/bash"
             - "-c"
