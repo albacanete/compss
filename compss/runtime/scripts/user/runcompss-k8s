@@ -238,7 +238,7 @@ mkdir "$TMP_DIR" &> /dev/null
 ECHO "Generating deployments.yml file into '${TMP_DIR}' ..." ; echo
 # get master IP from hostname
 get_master_hostname_ip
-$GENERATE_DEPLOYMENT_YML "$NUM_WORKER_CONTAINERS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$COMPSS_MASTER_IP" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yml
+$GENERATE_DEPLOYMENT_YML "$NUM_WORKER_CONTAINERS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$COMPSS_MASTER_HOSTNAME" "$COMPSS_MASTER_IP" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yml
 ASSERT "There was an error creating the Kubernetes deployments YAML file."
 
 # Add trap for results retrieval

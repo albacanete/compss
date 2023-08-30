@@ -6,10 +6,11 @@ APP_IMAGE_NAME=$2               # Application image name. With username: 'john12
 ABS_CONTEXT=$3                  # Absolute path where the context dir is located. This must be specified by the app-image provider.
 COMPUTING_UNITS=$4
 MEMORY=$5
-COMPSS_MASTER_IP=$6
-CREATION_TIME=$6
-MIN_VMS=$7
-MAX_VMS=$8
+COMPSS_MASTER_HOSTNAME=$6
+COMPSS_MASTER_IP=$7
+CREATION_TIME=$8
+MIN_VMS=$9
+MAX_VMS=$10
 shift 8
 RUNCOMPSS_ARGS=$*     # From here on, the typical runcompss parameters you would use
 #
@@ -57,23 +58,20 @@ spec:
   selector:
     matchLabels:
       app: ${IMG_NAME_WITHOUT_USERNAME}-master
+      role: master
   template:
     metadata:
       labels:
         app: ${IMG_NAME_WITHOUT_USERNAME}-master
+        role: master
     spec:
+      nodeSelector: 
+        kubernetes.io/hostname: ${COMPSS_MASTER_HOSTNAME}
       containers:
       - name: master
         image: ${IMAGE_NAME}
-        args: ["runcompss"]
-        env:
-        - name: RUNCOMPSS_ARGS
-          value: "${RUNCOMPSS_ARGS}"
-        # Add resource limits (CPU and memory)
-        resources:
-          limits:
-            cpu: "${COMPUTING_UNITS}"
-            memory: "${MEMORY}Gi"
+        command:
+          - ${master_command}
 "
 
 # K8s Service for the master container connection
@@ -89,7 +87,6 @@ spec:
     - protocol: TCP
       port: 22
       targetPort: 22
-  type: ClusterIP
 "
 
 # K8s Deployment for worker containers
@@ -103,17 +100,39 @@ spec:
   selector:
     matchLabels:
       app: ${IMG_NAME_WITHOUT_USERNAME}-worker
+      role: worker
   template:
     metadata:
       labels:
         app: ${IMG_NAME_WITHOUT_USERNAME}-worker
+        role: worker
     spec:
+      # Ensure only one worker pod per node
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  role: worker
+              topologyKey: "kubernetes.io/hostname" 
+      # Ensure a worker is NOT deployed on the master node
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values:
+                    - ${COMPSS_MASTER_HOSTNAME}
       containers:
       - name: worker
         image: ${IMAGE_NAME}
-        command: /bin/bash -c \"/usr/sbin/sshd -D \"
-        resources:
-          limits:
-            cpu: "${COMPUTING_UNITS}"
-            memory: "${MEMORY}Gi"
+        command:
+            - "/bin/bash"
+            - "-c"
+            - "/usr/sbin/sshd -D"
+          resources:
+            limits:
+              memory: ${MEMORY}G
+              cpu: '${COMPUTING_UNITS}'
 "
