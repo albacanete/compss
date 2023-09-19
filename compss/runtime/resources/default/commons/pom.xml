@@ -135,12 +135,12 @@
 			                    </artifactItem>
                                 <artifactItem>
                                     <groupId>es.bsc.conn</groupId>
-                                    <artifactId>k8s-conn</artifactId>
-                                    <version>${conn.version}</version>
+                                    <artifactId>kubernetes-conn</artifactId>
+                                    <version>${conn.version}</version>-
                                     <type>jar</type>
                                     <overWrite>false</overWrite>
                                     <outputDirectory>${project.build.directory}/cloud-conn/</outputDirectory>
-                                    <destFileName>k8s-conn.jar</destFileName>
+                                    <destFileName>kubernetes-conn.jar</destFileName>
 			                    </artifactItem>
 			        <!--artifactItem>
                                     <groupId>es.bsc.conn</groupId>
