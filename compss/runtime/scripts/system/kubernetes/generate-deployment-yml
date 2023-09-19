@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# Retrieve script arguments
+NUM_WORKERS=$1                  # Number of container workers
+APP_IMAGE_NAME=$2               # Application image name. With username: 'john123/my-app'
+ABS_CONTEXT=$3                  # Absolute path where the context dir is located. This must be specified by the app-image provider.
+COMPUTING_UNITS=$4
+MEMORY=$5
+COMPSS_MASTER_HOSTNAME=$6
+COMPSS_MASTER_IP=$7
+CREATION_TIME=$8
+MIN_VMS=$9
+MAX_VMS=$10
+shift 8
+RUNCOMPSS_ARGS=$*     # From here on, the typical runcompss parameters you would use
+#
+# This will include: creating the xml's inside master container, executing runcompss, and shutting down workers.
+#
+master_command="/bin/bash -c '"
+CLOUD="False"
+if [ ${MAX_VMS}  -gt 0 ]; then
+  CLOUD="True"
+fi
+
+# Create project and resources
+master_command="${master_command} /opt/COMPSs/Runtime/scripts/system/k8s/generate_k8s_resources.sh $ABS_CONTEXT/resources.xml $NUM_WORKERS $COMPUTING_UNITS $MEMORY $COMPSS_MASTER_IP $APP_IMAGE_NAME $CLOUD $CREATION_TIME ; "
+master_command="${master_command} /opt/COMPSs/Runtime/scripts/system/k8s/generate_k8s_project.sh $ABS_CONTEXT/project.xml $NUM_WORKERS $APP_IMAGE_NAME $MIN_VMS $MAX_VMS ; "
+
+# Add their path to the runcompss args
+RUNCOMPSS_ARGS=" --resources=\"$ABS_CONTEXT/resources.xml\" $RUNCOMPSS_ARGS"
+RUNCOMPSS_ARGS=" --project=\"$ABS_CONTEXT/project.xml\"  $RUNCOMPSS_ARGS"
+RUNCOMPSS_ARGS=" --master_name=master $RUNCOMPSS_ARGS"
+# Execute the runcompss command itself, from the context directory
+master_command="${master_command} cd \"${ABS_CONTEXT}\"; sleep 5 ; /opt/COMPSs/Runtime/scripts/user/runcompss $RUNCOMPSS_ARGS 2>&1; "
+
+# After the execution ends, stop all the workers. This is, stop their sshd
+# Concatenating with ; to ALWAYS shutdown nodes even if the above commands fail
+for i in $(seq 1 "$NUM_WORKERS"); do
+    master_command="${master_command} ssh -o StrictHostKeyChecking=no worker${i} \"pkill sshd\" ;"
+done
+  
+master_command="${master_command} exit 0 '" # Final quotes huehue
+
+#
+# Now, we are going to create the Kubernetes Deployments file.
+# One deployment for the master with 1 replica,
+# and one deployment for workers with NUM_WORKER_CONTAINERS replicas
+#
+
+# K8s Deployment for the master container
+echo -e "\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: compss-master
+  template:
+    metadata:
+      labels:
+        app: compss-master
+    spec:
+      nodeSelector: 
+        kubernetes.io/hostname: ${COMPSS_MASTER_HOSTNAME}
+      containers:
+      - name: compss-master
+        image: ${APP_IMAGE_NAME}
+        command:
+          - ${master_command}
+"
+
+# K8s Service for the master container connection
+echo -e "\
+apiVersion: v1
+kind: Service
+metadata:
+  name: compss-master
+spec:
+  selector:
+    app: compss-master
+  ports:
+    - protocol: TCP
+      port: 22
+      targetPort: 22
+"
+
+# K8s Deployment for worker containers
+echo -e "\
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compss-worker
+spec:
+  replicas: ${NUM_WORKER_CONTAINERS}
+  selector:
+    matchLabels:
+      app: compss-worker
+  template:
+    metadata:
+      labels:
+        app: compss-worker
+    spec:
+      # Ensure only one worker pod per node
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  role: worker
+              topologyKey: "kubernetes.io/hostname" 
+        # Ensure a worker is NOT deployed on the master node
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - ${COMPSS_MASTER_HOSTNAME}
+      containers:
+      - name: worker
+        image: ${APP_IMAGE_NAME}
+        command:
+            - "/bin/bash"
+            - "-c"
+            - "/usr/sbin/sshd -D"
+          resources:
+            limits:
+              memory: ${MEMORY}G
+              cpu: '${COMPUTING_UNITS}'
+"
