@@ -35,7 +35,7 @@
     props="vm-user=root vm-keypair-name=id_rsa vm-keypair-location=~/.ssh/"
     its="small medium large extra_large"
     # TODO: change add_cloud for Kubernetes
-    add_cloud 0 "$min_vms" "$max_vms" "K8s" "${props}" "$image_name" "/opt/COMPSs/" "/root/" "root" "" "" "" "" "" "${its}"
+    add_cloud 0 "$min_vms" "$max_vms" "Kubernetes" "${props}" "$image_name" "/opt/COMPSs/" "/root/" "root" "" "" "" "" "" "${its}"
   fi
   # Close project (from generate_project.sh)
   add_footer

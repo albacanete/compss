@@ -111,15 +111,15 @@ spec:
                 matchLabels:
                   role: worker
               topologyKey: "kubernetes.io/hostname" 
-      # Ensure a worker is NOT deployed on the master node
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-            - matchExpressions:
-                - key: kubernetes.io/hostname
-                  operator: NotIn
-                  values:
-                    - ${COMPSS_MASTER_HOSTNAME}
+        # Ensure a worker is NOT deployed on the master node
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - ${COMPSS_MASTER_HOSTNAME}
       containers:
       - name: worker
         image: ${APP_IMAGE_NAME}

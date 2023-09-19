@@ -1,11 +1,11 @@
-#!/bin/bash -e
+#!/bin/bash -xe
 
 #
 # SCRIPT CONSTANTS
 #
 DOCKER_DEFAULT_PORT=2376
 DOCKER_DEFAULT_PROTOCOL="tcp"
-GENERATORS_DIR=$(dirname "$0")/../system/k8s/
+GENERATORS_DIR=$(dirname "$0")/../system/kubernetes/
 GENERATE_DEPLOYMENT_YML=$GENERATORS_DIR/generate-deployment-yml
 DEFAULT_MEM=4
 DEFAULT_CU=1
