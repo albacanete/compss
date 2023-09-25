@@ -73,15 +73,9 @@ OPTIONAL ARGUMENTS:
 
 # Get the name of the master Pod
 get_master_pod_name(){
-    MASTER_POD_NAME=$(kubectl get pods -l app=${IMG_NAME_WITHOUT_USERNAME} -o jsonpath='{.items[0].metadata.name}')
+    MASTER_POD_NAME=$(kubectl -n compss get pods -l app=master -o jsonpath='{.items[0].metadata.name}')
     echo "COMPSs master Pod name: $MASTER_POD_NAME"    
 }   
-
-# Get the IP of the master Pod
-get_master_pod_ip() {
-    MASTER_POD_IP=$(kubectl get pod "$MASTER_POD_NAME" -o jsonpath='{.status.podIP}')
-    echo "COMPSs master Pod IP: $MASTER_POD_IP"
-}
 
 # Get the status of the master Pod
 get_master_status(){
@@ -90,7 +84,7 @@ get_master_status(){
       sleep ${wait_before}
     fi 
 
-    MASTER_POD_STATUS=$(kubectl get pod "$MASTER_POD_NAME" -o jsonpath='{.status.phase}')
+    MASTER_POD_STATUS=$(kubectl -n compss get pod | grep "$MASTER_POD_NAME" | awk '{ print $3 }' | xargs)
     echo "COMPSs master Pod status: $MASTER_POD_STATUS"
 }
 
@@ -108,13 +102,13 @@ retrieve_results() {
     mkdir -p "$DEBUG_DIR"
 
     # Get the name of the master pod
-    $(get_master_pod_name)
+    get_master_pod_name
   
-    kubectl cp "${MASTER_POD_NAME}:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
+    kubectl cp -n compss "${MASTER_POD_NAME}:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
     ASSERT "Results could not be retrieved...Master Pod unreachable"
     
     # Get logs from the master pod
-    kubectl logs ${MASTER_POD_NAME} 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
+    kubectl logs -n compss ${MASTER_POD_NAME} 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
     
     # Move .COMPSs contents and remove the .COMPSs directory
     mv "${DEBUG_DIR}"/.COMPSs/* "${DEBUG_DIR}"
@@ -147,7 +141,7 @@ for ARG in "${ALL_ARGS[@]}"; do
     RD_GOOD_ARG=0
     if [ "$argName" = "worker-containers" ] || [ "$argName" = "w" ]; then
         if echo "$argValue" | grep -q -E "^[1-9][0-9]{0,}$"; then
-            NUM_WORKER_CONTAINERS="$argValue"
+            NUM_WORKER_PODS="$argValue"
             RD_GOOD_ARG=1
         else
             ERROR "The --worker-containers argument must be a number >= 1. It's the number of worker containers that runcompss docker will spread across nodes (without taking into account the master container)."
@@ -187,7 +181,7 @@ ECHO "Execution summary -----------------"
 ECHO "Contatiner CPU units:     $COMPUTING_UNITS"
 ECHO "Container memory:         $MEMORY GB"
 ECHO "Image name:               $IMAGE_NAME"
-ECHO "Number of workers:        $NUM_WORKER_CONTAINERS"
+ECHO "Number of workers:        $NUM_WORKER_PODS"
 ECHO "COMPSs master hostname:   $COMPSS_MASTER_HOSTNAME"
 ECHO "Context directory:        $ABS_CONTEXT"
 ECHO "Creation time:            $CREATION_TIME"
@@ -204,7 +198,7 @@ fi
 
 # If any required argument is missing, the ALL_GOOD variable is set to 0
 ALL_GOOD=1
-if [ -z "$NUM_WORKER_CONTAINERS" ]; then
+if [ -z "$NUM_WORKER_PODS" ]; then
     ERROR "Indicate the number of workers before runcompss args ('--worker-containers=3' for example)"
     ALL_GOOD=0
 fi
@@ -242,23 +236,23 @@ mkdir "$TMP_DIR" &> /dev/null
 
 ECHO "Generating deployments.yml file into '${TMP_DIR}' ..." ; echo
  
-# Get the IP address of the Kubernetes node where the COMPSs master will run
-# TODO: CHECK IF THE IP NEEDED IS OF THE POD OR THE NODE WHERE THE POD RUNS
-$(get_master_hostname_ip)
-
 # Generate Kubernetes deployments YAML file
-$GENERATE_DEPLOYMENT_YML "$NUM_WORKER_CONTAINERS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$COMPSS_MASTER_HOSTNAME" "$MASTER_POD_IP" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yml
+$GENERATE_DEPLOYMENT_YML "$NUM_WORKER_PODS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$COMPSS_MASTER_HOSTNAME" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yml
 ASSERT "There was an error creating the Kubernetes deployments YAML file."
+echo 
+sleep 2
 
 # Add a trap for results retrieval
 trap "retrieve_results ; exit 1" SIGINT ERR
 
 ECHO "Cleaning environment from previous executions..." ; echo
 
-# Delete existing master and workers deployments
-kubectl delete deployment ${IMG_NAME_WITHOUT_USERNAME}-master
-kubectl delete deployment ${IMG_NAME_WITHOUT_USERNAME}-worker
-ASSERT "There was an error cleaning the environment from previous executions."
+# Delete existing master and workers deployments 
+# do not terminate the script if they did not exist
+kubectl delete namespace compss || true
+# kubectl delete deployment compss-master || true
+# kubectl delete deployment compss-worker || true
+# ASSERT "There was an error cleaning the environment from previous executions."
 echo
 
 ECHO "Waiting some seconds for the deletions to take effect"
@@ -266,17 +260,23 @@ sleep 5
 
 ECHO "Executing application in Kubernetes cluster..." ; echo
 
+# Create specific namespace in kubernetes
+kubectl create namespace compss
+
 # Deploy compss deployments and service
 kubectl apply -f ${TMP_DIR}/deployments.yml
 ASSERT "There was an error executing the application. Check the logs or the deployment output."
 echo
+sleep 5
 
 ECHO "Waiting application to finish..."
+get_master_pod_name
 get_master_status 5
-while [[ "${MASTER_POD_STATUS}" == "Running" ]]; do
+while [[ "${MASTER_POD_STATUS}" != "Running" ]]; do
 	get_master_status 5
 done
 ECHO "Application finished!"
+
+# Get results
 retrieve_results
 exit 0
-

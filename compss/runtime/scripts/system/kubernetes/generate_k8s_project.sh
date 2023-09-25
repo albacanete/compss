@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -xe
 
   # Setting up COMPSs_HOME
   if [ -z "${COMPSS_HOME}" ]; then

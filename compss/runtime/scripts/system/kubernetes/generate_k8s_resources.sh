@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -xe
 
 # Setting up COMPSs_HOME
 if [ -z "${COMPSS_HOME}" ]; then
@@ -8,7 +8,6 @@ if [ ! "${COMPSS_HOME: -1}" = "/" ]; then
   COMPSS_HOME="${COMPSS_HOME}/"
 fi
 export COMPSS_HOME=${COMPSS_HOME}
-
 
 # Retrieve script arguments
 resources_file=$1
@@ -22,7 +21,7 @@ creation_time=$8
 
 # shellcheck source=../xmls/generate_resources.sh
 # shellcheck disable=SC1091
-source "${COMPSS_HOME}Runtime/scripts/system/xmls/generate_resources.sh"
+source "${COMPSS_HOME}scripts/system/xmls/generate_resources.sh"
 
 # Init resources file
 init "${resources_file}"
