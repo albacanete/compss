@@ -1,0 +1,128 @@
+#!/bin/bash
+
+# Retrieve script arguments
+NUM_WORKERS=$1                  # Number of container workers
+APP_IMAGE_NAME=$2               # Application image name. With username: 'john123/my-app'
+ABS_CONTEXT=$3                  # Absolute path where the context dir is located. This must be specified by the app-image provider.
+COMPUTING_UNITS=$4
+MEMORY=$5
+COMPSS_MASTER_HOSTNAME=$6
+CREATION_TIME=$7
+MIN_VMS=$8
+MAX_VMS=$9
+shift 9
+RUNCOMPSS_ARGS=$*     # From here on, the typical runcompss parameters you would use
+#
+# This will include: creating the xml's inside master container, executing runcompss, and shutting down workers.
+#
+MASTER_COMMAND=""
+CLOUD="False"
+if [ ${MAX_VMS}  -gt 0 ]; then
+  CLOUD="True"
+fi
+
+# Create project and resources
+MASTER_COMMAND="${MASTER_COMMAND} /opt/COMPSs/Runtime/scripts/system/kubernetes/generate_k8s_resources.sh $ABS_CONTEXT/resources.xml $NUM_WORKERS $COMPUTING_UNITS $MEMORY $COMPSS_MASTER_HOSTNAME $APP_IMAGE_NAME $CLOUD $CREATION_TIME ; "
+MASTER_COMMAND="${MASTER_COMMAND} /opt/COMPSs/Runtime/scripts/system/kubernetes/generate_k8s_project.sh $ABS_CONTEXT/project.xml $NUM_WORKERS $APP_IMAGE_NAME $MIN_VMS $MAX_VMS ; "
+
+# Add their path to the runcompss args
+RUNCOMPSS_ARGS=" --resources=$ABS_CONTEXT/resources.xml $RUNCOMPSS_ARGS"
+RUNCOMPSS_ARGS=" --project=$ABS_CONTEXT/project.xml  $RUNCOMPSS_ARGS"
+RUNCOMPSS_ARGS=" --master_name=master $RUNCOMPSS_ARGS"
+# Execute the runcompss command itself, from the context directory
+MASTER_COMMAND="${MASTER_COMMAND} cd ${ABS_CONTEXT}; sleep 5 ; /opt/COMPSs/Runtime/scripts/user/runcompss $RUNCOMPSS_ARGS 2>&1;"
+
+# After the execution ends, stop all the workers. This is, stop their sshd
+# Concatenating with ; to ALWAYS shutdown nodes even if the above commands fail
+for i in $(seq 1 "$NUM_WORKERS"); do
+    MASTER_COMMAND="${MASTER_COMMAND} ssh -o StrictHostKeyChecking=no worker${i} \"pkill sshd\" ;"
+done
+  
+MASTER_COMMAND="${MASTER_COMMAND} exit 0"
+#
+# Now, we are going to create the Kubernetes Deployments file.
+# One deployment for the master with 1 replica,
+# and one deployment for workers with NUM_WORKER_CONTAINERS replicas
+#
+
+# K8s Deployment for the master container
+echo -e "\
+apiVersion: v1
+kind: Pod
+metadata:
+  name: master
+  namespace: compss
+  labels:
+    app.kubernetes.io/name: master
+spec:
+  containers:
+  - name: master
+    image: ${APP_IMAGE_NAME}
+    command: [ "/bin/bash", "-c", "${MASTER_COMMAND}" ]
+    ports:
+      - containerPort: 22
+        name: master-port 
+"
+
+# K8s Service for the master container connection
+echo -e "\
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: master
+  namespace: compss
+spec:
+  selector:
+    app.kubernetes.io/name: master
+  ports:
+  - name: master
+    protocol: TCP
+    port: 22
+    targetPort: master-port
+"
+
+for i in $(seq 1 "${NUM_WORKERS}"); do
+  echo -e "\
+## POD
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: worker$i
+  namespace: compss
+  labels:
+    app.kubernetes.io/name: worker$i
+spec:
+  containers:
+  - name: worker$i
+    image: ${APP_IMAGE_NAME}
+    command:
+      - "/bin/bash"
+      - "-c"
+      - "/usr/sbin/sshd -D"
+    resources:
+      limits:
+        memory: ${MEMORY}G
+        cpu: ${COMPUTING_UNITS}
+    ports:
+      - containerPort: 22
+        name: worker$i-port 
+  
+## SERVICE
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker$i
+  namespace: compss
+spec:
+  selector:
+    app.kubernetes.io/name: worker$i
+  ports:
+  - name: worker$i
+    protocol: TCP
+    port: 22
+    targetPort: worker$i-port
+"
+done
