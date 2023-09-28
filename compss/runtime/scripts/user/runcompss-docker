@@ -101,7 +101,7 @@ retrieveResults() {
     mkdir -p "$DEBUG_DIR"
     get_master_hostname_ip
     # We obtain Master container hash id by grepping the *_master container from a docker ps on the swarm manager.
-    export DOCKER_HOST="${DOCKER_DEFAULT_PROTOCOL}://${master_ip}:${DOCKER_DEFAULT_PORT}"
+    # export DOCKER_HOST="${DOCKER_DEFAULT_PROTOCOL}://${master_ip}:${DOCKER_DEFAULT_PORT}"
  
     DOCKER_CONTAINER_MASTER_HASH=$(docker ps -a | grep "${IMG_NAME_WITHOUT_USERNAME}-docker_master" | awk '{ print $1 }')
     docker cp "${DOCKER_CONTAINER_MASTER_HASH}:${ABS_CONTEXT}" "${RESULTS_DIR}" ;

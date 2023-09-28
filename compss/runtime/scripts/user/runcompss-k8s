@@ -1,10 +1,10 @@
-#!/bin/bash -xe
+#!/bin/bash -e
 
 #
 # SCRIPT CONSTANTS
 #
 GENERATORS_DIR=$(dirname "$0")/../system/kubernetes/
-GENERATE_DEPLOYMENT_YML="$GENERATORS_DIR/generate-deployment-yml"
+GENERATE_DEPLOYMENT_YML="$GENERATORS_DIR/generate-pods-yml"
 DEFAULT_MEM=4
 DEFAULT_CU=1
 DEFAULT_ELASTIC=0
@@ -73,25 +73,25 @@ OPTIONAL ARGUMENTS:
 
 # Get the name of the master Pod
 get_master_pod_name(){
-    MASTER_POD_NAME=$(kubectl -n compss get pods -l app=master -o jsonpath='{.items[0].metadata.name}')
+    MASTER_POD_NAME=$(kubectl -n compss get pods -l app.kubernetes.io/name=master -o jsonpath='{.items[0].metadata.name}')
     echo "COMPSs master Pod name: $MASTER_POD_NAME"    
 }   
 
 # Get the status of the master Pod
-get_master_status(){
+get_worker_status(){
     wait_before=$1
     if [ -n ${wait_before} ]; then
       sleep ${wait_before}
     fi 
 
-    MASTER_POD_STATUS=$(kubectl -n compss get pod | grep "$MASTER_POD_NAME" | awk '{ print $3 }' | xargs)
-    echo "COMPSs master Pod status: $MASTER_POD_STATUS"
+    WORKER_POD_STATUS=$(kubectl -n compss get pods worker1 -o=jsonpath='{.status.phase}')
+    echo "COMPSs worker Pod status: $WORKER_POD_STATUS"
 }
 
 retrieve_results() {
     cd "${TMP_DIR}/.."
 
-    ECHO "Retrieving results from the master pod..."
+    ECHO "Retrieving results from the master Pod..."
 
     # Copying results from master container to this machine... (docker cp)
     #IMG_NAME_WITHOUT_USERNAME="$(echo "$IMAGE_NAME" | sed -e 's|[A-Za-z0-9_]*/||g')"
@@ -101,18 +101,19 @@ retrieve_results() {
     rm -rf "$RESULTS_DIR" &> /dev/null
     mkdir -p "$DEBUG_DIR"
 
-    # Get the name of the master pod
+    # Get the name of the master Pod
     get_master_pod_name
   
-    kubectl cp -n compss "${MASTER_POD_NAME}:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
+    # Get results
+    kubectl -n compss cp "${MASTER_POD_NAME}:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
     ASSERT "Results could not be retrieved...Master Pod unreachable"
     
-    # Get logs from the master pod
-    kubectl logs -n compss ${MASTER_POD_NAME} 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
+    # Get logs from the master Pod
+    kubectl -n compss logs ${MASTER_POD_NAME} 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
     
     # Move .COMPSs contents and remove the .COMPSs directory
-    mv "${DEBUG_DIR}"/.COMPSs/* "${DEBUG_DIR}"
-    rm -rf "${DEBUG_DIR}"/.COMPSs
+    # mv "${DEBUG_DIR}"/.COMPSs/* "${DEBUG_DIR}"
+    # rm -rf "${DEBUG_DIR}"/.COMPSs
 
     echo ; ECHO "Results successfully retrieved!" ; echo
     ECHO "Check the application results in '$RESULTS_DIR'"
@@ -256,7 +257,7 @@ kubectl delete namespace compss || true
 echo
 
 ECHO "Waiting some seconds for the deletions to take effect"
-sleep 5
+sleep 2
 
 ECHO "Executing application in Kubernetes cluster..." ; echo
 
@@ -271,9 +272,9 @@ sleep 5
 
 ECHO "Waiting application to finish..."
 get_master_pod_name
-get_master_status 5
-while [[ "${MASTER_POD_STATUS}" != "Running" ]]; do
-	get_master_status 5
+get_worker_status 5
+while [[ "${WORKER_POD_STATUS}" == "Running" ]]; do
+	get_worker_status 5
 done
 ECHO "Application finished!"
 

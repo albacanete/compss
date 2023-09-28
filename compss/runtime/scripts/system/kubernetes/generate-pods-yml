@@ -55,13 +55,14 @@ metadata:
   labels:
     app.kubernetes.io/name: master
 spec:
+  restartPolicy: Never
   containers:
   - name: master
     image: ${APP_IMAGE_NAME}
     command: [ "/bin/bash", "-c", "${MASTER_COMMAND}" ]
     ports:
       - containerPort: 22
-        name: master-port 
+        name: master-22 
 "
 
 # K8s Service for the master container connection
@@ -76,10 +77,10 @@ spec:
   selector:
     app.kubernetes.io/name: master
   ports:
-  - name: master
+  - name: port-22
     protocol: TCP
     port: 22
-    targetPort: master-port
+    targetPort: master-22
 "
 
 for i in $(seq 1 "${NUM_WORKERS}"); do
@@ -108,7 +109,7 @@ spec:
         cpu: ${COMPUTING_UNITS}
     ports:
       - containerPort: 22
-        name: worker$i-port 
+        name: worker$i-port
   
 ## SERVICE
 ---
@@ -121,7 +122,7 @@ spec:
   selector:
     app.kubernetes.io/name: worker$i
   ports:
-  - name: worker$i
+  - name: port-22
     protocol: TCP
     port: 22
     targetPort: worker$i-port
