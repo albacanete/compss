@@ -151,7 +151,7 @@ class Task:  # pylint: disable=too-few-public-methods, too-many-instance-attribu
             "numba_declaration": None,  # guvectorize declaration
             "varargs_type": parameter.IN,  # Here for legacy purposes
         }  # type: typing.Dict[str, typing.Any]
-        for (key, value) in default_decorator_values.items():
+        for key, value in default_decorator_values.items():
             if key not in self.decorator_arguments:
                 self.decorator_arguments[key] = value
         # Give all parameters a unique instance for them (step b)
@@ -159,7 +159,7 @@ class Task:  # pylint: disable=too-few-public-methods, too-many-instance-attribu
         # @task(a = IN, b = IN, c = INOUT)
         # both a and b point to the same IN object (the one from parameter.py)
         # Giving them a unique instance makes life easier in further steps
-        for (key, value) in self.decorator_arguments.items():
+        for key, value in self.decorator_arguments.items():
             # Not all decorator arguments are necessarily parameters
             # (see default_decorator_values)
             if is_param(value):

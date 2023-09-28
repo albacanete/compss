@@ -299,7 +299,6 @@ class TaskMaster:
         # This lock makes this decorator able to handle various threads
         # calling the same task concurrently
         with MASTER_LOCK:
-
             # Inspect the user function, get information about the arguments and
             # their names. This defines self.param_args, self.param_varargs,
             # and self.param_defaults. And gives non-None default
@@ -768,7 +767,7 @@ class TaskMaster:
         num_positionals = min(len(self.param_args), len(args))
         arg_names = self.param_args[:num_positionals]
         arg_objects = args[:num_positionals]
-        for (arg_name, arg_object) in zip(arg_names, arg_objects):
+        for arg_name, arg_object in zip(arg_names, arg_objects):
             self.parameters[arg_name] = self.build_parameter_object(
                 arg_name, arg_object, code_strings=code_strings
             )
@@ -784,7 +783,7 @@ class TaskMaster:
                 # defaults[-2] goes with positionals[-2]
                 # ...
                 # Also, |defaults| <= |positionals|
-                for (arg_name, default_value) in reversed(
+                for arg_name, default_value in reversed(
                     list(
                         zip(
                             list(reversed(self.param_args))[:num_defaults],
@@ -803,7 +802,7 @@ class TaskMaster:
         # and their order in the case of the variadic ones
         # Process the variadic arguments
         supported_varargs = []
-        for (i, var_arg) in enumerate(args[num_positionals:]):
+        for i, var_arg in enumerate(args[num_positionals:]):
             arg_name = get_vararg_name(self.param_varargs, i)
             self.parameters[arg_name] = self.build_parameter_object(
                 arg_name, var_arg, code_strings=code_strings
@@ -812,7 +811,7 @@ class TaskMaster:
                 supported_varargs.append(self.param_varargs)
         # Process keyword arguments
         supported_kwargs = []
-        for (name, value) in kwargs.items():
+        for name, value in kwargs.items():
             arg_name = get_kwarg_name(name)
             self.parameters[arg_name] = self.build_parameter_object(
                 arg_name, value, code_strings=code_strings
@@ -2326,7 +2325,7 @@ def _extract_parameter(
         value = f"{OT.is_tracked(param.content)} {len(param.content)} {con_type}"
         OT.stop_tracking(param.content, collection=True)
         typ = TYPE.COLLECTION
-        for (_, x_param) in enumerate(param.content):
+        for _, x_param in enumerate(param.content):
             x_value, x_type, _, _, _, x_con_type, _, _ = _extract_parameter(
                 x_param, code_strings, param.depth - 1
             )
@@ -2370,7 +2369,6 @@ def _extract_parameter(
             if isinstance(k_value, COMPSsFile):
                 real_k_value = k_value.original_path
             if k_con_type != con_type:
-
                 value = f"{value} {real_k_type} {real_k_value} {k_con_type}"
             else:
                 # remove last dict_collection._classname if key is a dict_collection  # noqa: E501

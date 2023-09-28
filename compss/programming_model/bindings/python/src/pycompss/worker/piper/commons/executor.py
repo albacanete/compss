@@ -253,7 +253,6 @@ def executor(
     :return: None.
     """
     try:
-
         if compss_with_dlb:
             dlb_affinity.init()
             dlb_affinity.setaffinity([], os.getpid())
