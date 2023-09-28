@@ -30,7 +30,7 @@ RUNCOMPSS_ARGS=" --resources=$ABS_CONTEXT/resources.xml $RUNCOMPSS_ARGS"
 RUNCOMPSS_ARGS=" --project=$ABS_CONTEXT/project.xml  $RUNCOMPSS_ARGS"
 RUNCOMPSS_ARGS=" --master_name=master $RUNCOMPSS_ARGS"
 # Execute the runcompss command itself, from the context directory
-MASTER_COMMAND="${MASTER_COMMAND} cd ${ABS_CONTEXT}; sleep 20 ; /opt/COMPSs/Runtime/scripts/user/runcompss $RUNCOMPSS_ARGS 2>&1;"
+MASTER_COMMAND="${MASTER_COMMAND} cd ${ABS_CONTEXT}; sleep 30 ; /opt/COMPSs/Runtime/scripts/user/runcompss $RUNCOMPSS_ARGS 2>&1;"
 
 # After the execution ends, stop all the workers. This is, stop their sshd
 # Concatenating with ; to ALWAYS shutdown nodes even if the above commands fail
@@ -38,30 +38,33 @@ for i in $(seq 1 "$NUM_WORKERS"); do
     MASTER_COMMAND="${MASTER_COMMAND} ssh -o StrictHostKeyChecking=no worker${i} \"pkill sshd\" ;"
 done
   
-MASTER_COMMAND="${MASTER_COMMAND} sleep 60;  exit 0"
+MASTER_COMMAND="${MASTER_COMMAND} exit 0"
 #
 # Now, we are going to create the Kubernetes Deployments file.
 # One deployment for the master with 1 replica,
 # and one deployment for workers with NUM_WORKER_CONTAINERS replicas
 #
 
-# K8s Deployment for the master container
+# K8s Job for the master container
 echo -e "\
-apiVersion: v1
-kind: Pod
+apiVersion: batch/v1
+kind: Job
 metadata:
   name: master
   namespace: compss
   labels:
     app.kubernetes.io/name: master
 spec:
-  containers:
-  - name: master
-    image: ${APP_IMAGE_NAME}
-    command: [ "/bin/bash", "-c", "${MASTER_COMMAND}" ]
-    ports:
-      - containerPort: 22
-        name: master-port 
+  template:
+    spec:
+      containers:
+      - name: master
+        image: ${APP_IMAGE_NAME}
+        command: [ "/bin/bash", "-c", "${MASTER_COMMAND}" ]
+        ports:
+        - containerPort: 22
+          name: master-port 
+      restartPolicy: Never
 "
 
 # K8s Service for the master container connection
@@ -94,7 +97,6 @@ metadata:
   labels:
     app.kubernetes.io/name: worker$i
 spec:
-  restartPolicy: Never
   containers:
   - name: worker$i
     image: ${APP_IMAGE_NAME}

@@ -21,7 +21,7 @@ creation_time=$8
 
 # shellcheck source=../xmls/generate_resources.sh
 # shellcheck disable=SC1091
-source "${COMPSS_HOME}scripts/system/xmls/generate_resources.sh"
+source "${COMPSS_HOME}Runtime/scripts/system/xmls/generate_resources.sh"
 
 # Init resources file
 init "${resources_file}"
