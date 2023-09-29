@@ -19,10 +19,6 @@ ENV CLASSPATH $CLASSPATH:/opt/COMPSs/Runtime/compss-engine.jar
 ENV LD_LIBRARY_PATH /opt/COMPSs/Bindings/bindings-common/lib:$JAVA_HOME/jre/lib/amd64/server
 ENV COMPSS_HOME=/opt/COMPSs/
 
-# Install k8s cloud connector
-COPY utils/kubernetes/kubernetes-conn.jar /tmp/kubernetes-conn.jar
-RUN mvn install:install-file -DgroupId=es.bsc.conn -DartifactId=kubernetes-conn -Dversion=1.8-9 -Dpackaging=jar -Dfile=/tmp/kubernetes-conn.jar
-
 # Install COMPSs
 RUN cd /framework && \
     # ./submodules_get.sh && \
@@ -31,8 +27,6 @@ RUN cd /framework && \
     mv /root/.m2 /home/jenkins && \
     chown -R jenkins: /framework && \
     chown -R jenkins: /home/jenkins/ 
-
-RUN mv /tmp/kubernetes-conn.jar /opt/COMPSs/Runtime/cloud-conn/kubernetes-conn.jar 
 
 # Expose SSH port and run SSHD
 EXPOSE 22
