@@ -45,7 +45,7 @@ MASTER_COMMAND="${MASTER_COMMAND} sleep 60;  exit 0"
 # and one deployment for workers with NUM_WORKER_CONTAINERS replicas
 #
 
-# K8s Deployment for the master container
+# Create master Pod
 echo -e "\
 apiVersion: v1
 kind: Pod
@@ -65,7 +65,7 @@ spec:
         name: master-22 
 "
 
-# K8s Service for the master container connection
+# Create master service
 echo -e "\
 ---
 apiVersion: v1
@@ -83,6 +83,7 @@ spec:
     targetPort: master-22
 "
 
+# Create worker Pods
 for i in $(seq 1 "${NUM_WORKERS}"); do
   echo -e "\
 ## POD
@@ -93,7 +94,7 @@ metadata:
   name: worker$i
   namespace: compss
   labels:
-    app.kubernetes.io/name: worker$i
+    app.kubernetes.io/name: worker
 spec:
   restartPolicy: Never
   containers:
@@ -109,22 +110,25 @@ spec:
         cpu: ${COMPUTING_UNITS}
     ports:
       - containerPort: 22
-        name: worker$i-port
-  
-## SERVICE
+        name: workers-port
+"
+done
+
+# Create workers service
+echo -e "\
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: worker$i
+  name: worker-svc
   namespace: compss
 spec:
+  clusterIP: None  # This makes it a headless service
   selector:
-    app.kubernetes.io/name: worker$i
+    app.kubernetes.io/name: worker
   ports:
   - name: port-22
     protocol: TCP
     port: 22
-    targetPort: worker$i-port
+    targetPort: worker-port
 "
-done

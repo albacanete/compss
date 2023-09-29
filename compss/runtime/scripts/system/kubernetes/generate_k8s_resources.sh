@@ -29,7 +29,7 @@ init "${resources_file}"
 add_header
 # Add workers
 for (( i=1; i<=num_workers; i++ )); do
-  add_compute_node "worker$i" "$cus" "0" "0" "$memory" "$((40000 + 2*(i-1) + 1))" "$((40000 + 2*(i-1) + 2))" "" ""
+  add_compute_node "worker$i.worker-svc.compss.svc.cluster.local" "$cus" "0" "0" "$memory" "$((40000 + 2*(i-1) + 1))" "$((40000 + 2*(i-1) + 2))" "" ""
 done
 if [ "${cloud}" == "True" ]; then
   echo "Adding cloud ..."
