@@ -29,7 +29,7 @@ add_master_node ""
 #Add workers (from generate_project.sh)
 for (( i=1; i<=num_workers; i++ )); do
   # Add DNS name provided by the headless service in Kubernetes
-  add_compute_node "worker$i.worker-svc.compss.svc.cluster.local" "/opt/COMPSs/" "/tmp/worker$i" "" "" "" "" "" ""
+  add_compute_node "worker$i" "/opt/COMPSs/" "/tmp/worker$i" "" "" "" "" "" ""
 done
 if [ ${max_vms} -gt 0 ]; then
   echo "Setting a cloud provider with min_vms: ${min_vms} and max_vms: ${max_vms}"

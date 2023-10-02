@@ -53,34 +53,22 @@ metadata:
   name: master
   namespace: compss
   labels:
-    app.kubernetes.io/name: master
+    app: compss
+    node: master
 spec:
+  hostname: master
+  subdomain: compss-svc
   restartPolicy: Never
+  dnsConfig:
+    searches:
+    - compss-svc.compss.svc.cluster.local
   containers:
   - name: master
     image: ${APP_IMAGE_NAME}
     command: [ "/bin/bash", "-c", "${MASTER_COMMAND}" ]
     ports:
       - containerPort: 22
-        name: master-22 
-"
-
-# Create master service
-echo -e "\
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: master
-  namespace: compss
-spec:
-  selector:
-    app.kubernetes.io/name: master
-  ports:
-  - name: port-22
-    protocol: TCP
-    port: 22
-    targetPort: master-22
+        name: ssh-port
 "
 
 # Create worker Pods
@@ -94,9 +82,26 @@ metadata:
   name: worker$i
   namespace: compss
   labels:
-    app.kubernetes.io/name: worker
+    app: compss
+    node: worker
 spec:
+  hostname: worker$i
+  subdomain: compss-svc
   restartPolicy: Never
+  dnsConfig:
+    searches:
+    - compss-svc.compss.svc.cluster.local
+  # Make worker nodes run in different nodes
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: node
+            operator: In
+            values:
+            - worker
+        topologyKey: "kubernetes.io/hostname"
   containers:
   - name: worker$i
     image: ${APP_IMAGE_NAME}
@@ -110,25 +115,25 @@ spec:
         cpu: ${COMPUTING_UNITS}
     ports:
       - containerPort: 22
-        name: workers-port
+        name: ssh-port
 "
 done
 
-# Create workers service
+# Create headless service
 echo -e "\
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: worker-svc
+  name: compss-svc
   namespace: compss
 spec:
   clusterIP: None  # This makes it a headless service
   selector:
-    app.kubernetes.io/name: worker
+    app: compss
   ports:
   - name: port-22
     protocol: TCP
     port: 22
-    targetPort: worker-port
+    targetPort: ssh-port
 "

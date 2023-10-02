@@ -73,7 +73,7 @@ OPTIONAL ARGUMENTS:
 
 # Get the name of the master Pod
 get_master_pod_name(){
-    MASTER_POD_NAME=$(kubectl -n compss get pods -l app.kubernetes.io/name=master -o jsonpath='{.items[0].metadata.name}')
+    MASTER_POD_NAME=$(kubectl -n compss get pods -l app=master -o jsonpath='{.items[0].metadata.name}')
     echo "COMPSs master Pod name: $MASTER_POD_NAME"    
 }   
 
@@ -100,16 +100,13 @@ retrieve_results() {
     
     rm -rf "$RESULTS_DIR" &> /dev/null
     mkdir -p "$DEBUG_DIR"
-
-    # Get the name of the master Pod
-    get_master_pod_name
   
     # Get results
-    kubectl -n compss cp "${MASTER_POD_NAME}:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
+    kubectl -n compss cp "master:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
     ASSERT "Results could not be retrieved...Master Pod unreachable"
     
     # Get logs from the master Pod
-    kubectl -n compss logs ${MASTER_POD_NAME} 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
+    kubectl -n compss logs master 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
     
     # Move .COMPSs contents and remove the .COMPSs directory
     # mv "${DEBUG_DIR}"/.COMPSs/* "${DEBUG_DIR}"
@@ -271,7 +268,6 @@ echo
 sleep 5
 
 ECHO "Waiting application to finish..."
-get_master_pod_name
 get_worker_status 5
 while [[ "${WORKER_POD_STATUS}" == "Running" ]]; do
 	get_worker_status 5

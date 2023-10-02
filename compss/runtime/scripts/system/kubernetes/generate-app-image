@@ -1,4 +1,4 @@
-#!/bin/bash -xe
+#!/bin/bash
 
 GENERATORS_DIR=$(dirname "$0")
 # shellcheck source=./aux_functions.sh
