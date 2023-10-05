@@ -58,19 +58,31 @@ metadata:
     app: compss
     node: master
 spec:
-  hostname: master
-  subdomain: compss-svc
   restartPolicy: Never
-  dnsConfig:
-    searches:
-    - compss-svc.compss-${IMG_WITHOUT_TAG}.svc.cluster.local
   containers:
   - name: master
     image: ${APP_IMAGE_NAME}
     command: [ "/bin/bash", "-c", "${MASTER_COMMAND}" ]
     ports:
       - containerPort: 22
-        name: ssh-port
+        name: master-port
+"
+
+echo -e "\
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: master
+  namespace: compss-${IMG_WITHOUT_TAG}
+spec:
+  selector:
+    node: master
+  ports:
+  - name: port-22
+    protocol: TCP
+    port: 22
+    targetPort: master-port
 "
 
 # Create worker Pods
@@ -85,14 +97,9 @@ metadata:
   namespace: compss-${IMG_WITHOUT_TAG}
   labels:
     app: compss
-    node: worker
+    node: worker$i
 spec:
-  hostname: worker$i
-  subdomain: compss-svc
   restartPolicy: Never
-  dnsConfig:
-    searches:
-    - compss-svc.compss-${IMG_WITHOUT_TAG}.svc.cluster.local
   # Make worker nodes run in different nodes
   affinity:
     podAntiAffinity:
@@ -117,25 +124,21 @@ spec:
         cpu: ${COMPUTING_UNITS}
     ports:
       - containerPort: 22
-        name: ssh-port
-"
-done
+        name: worker$i-port
 
-# Create headless service
-echo -e "\
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: compss-svc
+  name: worker$i
   namespace: compss-${IMG_WITHOUT_TAG}
 spec:
-  clusterIP: None  # This makes it a headless service
   selector:
-    app: compss
+    node: worker$i
   ports:
   - name: port-22
     protocol: TCP
     port: 22
-    targetPort: ssh-port
+    targetPort: worker$i-port
 "
+done

@@ -45,97 +45,112 @@ MASTER_COMMAND="${MASTER_COMMAND} sleep 60;  exit 0"
 # and one deployment for workers with NUM_WORKER_CONTAINERS replicas
 #
 
-IMG_WITHOUT_TAG="$(echo "$APP_IMAGE_NAME" | awk -F'[:/]' '{print $2}')"
-
-# Create master Pod
 echo -e "\
-apiVersion: v1
-kind: Pod
+## Master Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: master
   namespace: compss-${IMG_WITHOUT_TAG}
-  labels:
-    app: compss
-    node: master
 spec:
-  hostname: master
-  subdomain: compss-svc
-  restartPolicy: Never
-  dnsConfig:
-    searches:
-    - compss-svc.compss-${IMG_WITHOUT_TAG}.svc.cluster.local
-  containers:
-  - name: master
-    image: ${APP_IMAGE_NAME}
-    command: [ "/bin/bash", "-c", "${MASTER_COMMAND}" ]
-    ports:
-      - containerPort: 22
-        name: ssh-port
+  replicas: 1
+  selector:
+    matchLabels:
+      app: compss
+      node: master
+  template:
+    metadata:
+      labels:
+        app: compss
+        node: master
+    spec:
+      containers:
+      - name: master
+        image: ${APP_IMAGE_NAME}
+        command: [ \"/bin/bash\", \"-c\", \"${MASTER_COMMAND}\" ]
+        ports:
+          - containerPort: 22
+            name: master-port
 "
 
-# Create worker Pods
-for i in $(seq 1 "${NUM_WORKERS}"); do
-  echo -e "\
-## POD
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: worker$i
-  namespace: compss-${IMG_WITHOUT_TAG}
-  labels:
-    app: compss
-    node: worker
-spec:
-  hostname: worker$i
-  subdomain: compss-svc
-  restartPolicy: Never
-  dnsConfig:
-    searches:
-    - compss-svc.compss-${IMG_WITHOUT_TAG}.svc.cluster.local
-  # Make worker nodes run in different nodes
-  affinity:
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-      - labelSelector:
-          matchExpressions:
-          - key: node
-            operator: In
-            values:
-            - worker
-        topologyKey: "kubernetes.io/hostname"
-  containers:
-  - name: worker$i
-    image: ${APP_IMAGE_NAME}
-    command:
-      - "/bin/bash"
-      - "-c"
-      - "/usr/sbin/sshd -D"
-    resources:
-      limits:
-        memory: ${MEMORY}G
-        cpu: ${COMPUTING_UNITS}
-    ports:
-      - containerPort: 22
-        name: ssh-port
-"
-done
-
-# Create headless service
 echo -e "\
+## Master Service
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: compss-svc
+  name: master
   namespace: compss-${IMG_WITHOUT_TAG}
 spec:
-  clusterIP: None  # This makes it a headless service
   selector:
-    app: compss
+    node: master
   ports:
   - name: port-22
     protocol: TCP
     port: 22
-    targetPort: ssh-port
+    targetPort: master-port
 "
+
+for i in $(seq 1 "${NUM_WORKERS}"); do
+  echo -e "\
+## Worker Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker$i
+  namespace: compss-${IMG_WITHOUT_TAG}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: compss
+      node: worker$i
+  template:
+    metadata:
+      labels:
+        app: compss
+        node: worker$i
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: node
+                operator: In
+                values:
+                - worker
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: worker
+        image: ${APP_IMAGE_NAME}
+        command:
+          - "/bin/bash"
+          - "-c"
+          - "/usr/sbin/sshd -D"
+        resources:
+          limits:
+            memory: ${MEMORY}G
+            cpu: ${COMPUTING_UNITS}
+        ports:
+          - containerPort: 22
+            name: worker$i-port
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker$i
+  namespace: compss-${IMG_WITHOUT_TAG}
+spec:
+  selector:
+    node: worker$i
+  ports:
+  - name: port-22
+    protocol: TCP
+    port: 22
+    targetPort: worker$i-port
+"
+done
