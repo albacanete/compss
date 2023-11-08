@@ -3,14 +3,13 @@
 #
 # SCRIPT CONSTANTS
 #
-GENERATORS_DIR=$(dirname "$0")/../system/kubernetes/
+GENERATORS_DIR=$(dirname "$0")/../system/kubernetes
 GENERATE_DEPLOYMENT_YML="$GENERATORS_DIR/generate-pods-yml"
+GENERATE_ROLE_YML="$GENERATORS_DIR/generate-sa-role-yaml"
 DEFAULT_MEM=4
 DEFAULT_CU=1
 DEFAULT_ELASTIC=0
-# TODO:  This command is needed when implementing elasticity and the cloud connector
-# I assume that, for now, Cloud=False always in the resources file
-COMPSS_MASTER_HOSTNAME="none"
+COMPSS_MASTER_HOSTNAME="none"   # not needed in kubectl
 
 #
 # HELPER FUNCTIONS
@@ -21,7 +20,7 @@ showHelp() {
   echo -e "
 ::::::::::::::: [  RUNCOMPSS-K8S  -  HELP  ] ::::::::::::::::::::::
 
-First of all, remember that in order to use runcompss-k8s you must have a working Kubernetes cluster,
+In order to use runcompss-k8s you must have a working Kubernetes cluster,
 and you need to have installed and configured in this computer the kubectl CLI.
 
 Usage: $0
@@ -62,7 +61,8 @@ OPTIONAL ARGUMENTS:
     --c-creation-time:         Time required to create a Kubernetes Pod (default: 60 sec)
                                Example: --c-creation-time=12
 
-    --c-elasticity:            Number of worker Pods to run on the Kubernetes cluster (default: $DEFAULT_ELASTIC)
+    --c-elasticity:            Number of worker Pods to run on cloud mode (default: $DEFAULT_ELASTIC)
+                               Example: --c-elasticity=2
 
 
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -71,7 +71,7 @@ OPTIONAL ARGUMENTS:
 
 # Get the name of the master Pod
 get_master_pod_name(){
-    MASTER_POD_NAME=$(kubectl -n compss-${IMG_WITHOUT_TAG} get pods -l app=master -o jsonpath='{.items[0].metadata.name}')
+    MASTER_POD_NAME=$(kubectl get pods -l app=master -o jsonpath='{.items[0].metadata.name}')
     echo "COMPSs master Pod name: $MASTER_POD_NAME"    
 }   
 
@@ -82,18 +82,16 @@ get_worker_status(){
       sleep ${wait_before}
     fi 
 
-    WORKER_POD_STATUS=$(kubectl -n compss-${IMG_WITHOUT_TAG} get pods worker1 -o=jsonpath='{.status.phase}')
-    # WORKER_POD_STATUS=$(kubectl get pods worker1 -o=jsonpath='{.status.phase}')
-    echo "COMPSs worker Pod status: $WORKER_POD_STATUS"
+    WORKER_POD_STATUS=$(kubectl get pods worker1 -o=jsonpath='{.status.phase}')
+    echo "COMPSs worker1 Pod status: $WORKER_POD_STATUS"
 }
 
+# Get the execution results form the master Pod0
 retrieve_results() {
     cd "${TMP_DIR}/.."
 
     ECHO "Retrieving results from the master Pod..."
 
-    # Copying results from master container to this machine... (docker cp)
-    #IMG_NAME_WITHOUT_USERNAME="$(echo "$IMAGE_NAME" | sed -e 's|[A-Za-z0-9_]*/||g')"
     RESULTS_DIR="./${IMG_NAME_WITHOUT_USERNAME}-results"
     DEBUG_DIR="$RESULTS_DIR/debug"
     
@@ -101,19 +99,14 @@ retrieve_results() {
     mkdir -p "$DEBUG_DIR"
   
     # Get results
-    # kubectl cp "master:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
-    kubectl -n compss-${IMG_WITHOUT_TAG} cp "master:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
+    kubectl cp "master:/root/.COMPSs"  "${DEBUG_DIR}" &> /dev/null
     ASSERT "Results could not be retrieved...Master Pod unreachable"
     
-    # Get logs from the master Pod
-    kubectl -n compss-${IMG_WITHOUT_TAG} logs master 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
-    # kubectl logs master 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
-    
-    # Move .COMPSs contents and remove the .COMPSs directory
-    # mv "${DEBUG_DIR}"/.COMPSs/* "${DEBUG_DIR}"
-    # rm -rf "${DEBUG_DIR}"/.COMPSs
+    # Get logs
+    kubectl logs master 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
+    ASSERT "Logs could not be retrieved...Master Pod unreachable"
 
-    echo ; ECHO "Results successfully retrieved!" ; echo
+    ECHO "Results successfully retrieved!" ; echo
     ECHO "Check the application results in '$RESULTS_DIR'"
     ECHO "In case you had debug enabled, check: '$DEBUG_DIR'"
     echo
@@ -130,7 +123,7 @@ MEMORY="$DEFAULT_MEM"
 CREATION_TIME=60
 MIN_VMS=0
 MAX_VMS="$DEFAULT_ELASTIC"
-RUNCOMPSS_ARGS="$*" # this loop will strip from RUNCOMPSS_ARGS all the runcomps-docker args
+RUNCOMPSS_ARGS="$*" # this loop will strip from RUNCOMPSS_ARGS all the runcomps-k8s args
 
 # Retrieve parameters
 for ARG in "${ALL_ARGS[@]}"; do
@@ -173,8 +166,8 @@ done
 
 # Log parameters
 ECHO "Execution summary -----------------"
-ECHO "Contatiner CPU units:     $COMPUTING_UNITS"
-ECHO "Container memory:         $MEMORY GB"
+ECHO "Pod CPU units:            $COMPUTING_UNITS"
+ECHO "Pod memory:               $MEMORY GB"
 ECHO "Image name:               $IMAGE_NAME"
 ECHO "Number of workers:        $NUM_WORKER_PODS"
 ECHO "Context directory:        $ABS_CONTEXT"
@@ -227,49 +220,52 @@ mkdir "$TMP_DIR" &> /dev/null
 ECHO "Generating deployments.yml file into '${TMP_DIR}' ..." ; echo
  
 # Generate Kubernetes deployments YAML file
-$GENERATE_DEPLOYMENT_YML "$NUM_WORKER_PODS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$COMPSS_MASTER_HOSTNAME" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yml
+$GENERATE_DEPLOYMENT_YML "$NUM_WORKER_PODS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$COMPSS_MASTER_HOSTNAME" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yaml
 ASSERT "There was an error creating the Kubernetes deployments YAML file."
+sleep 1
+
+# Generate default ServiceAccount role for Cloud Connector
+$GENERATE_ROLE_YML > "${TMP_DIR}"/sa-role.yaml
+ASSERT "There was an error creating the ServiceAccount role YAML file."
 echo 
-sleep 2
+sleep 1
 
 # Add a trap for results retrieval
 trap "retrieve_results ; exit 1" SIGINT ERR
 
+# Delete hanging Pods from previous executions
 ECHO "Cleaning environment from previous executions..." ; echo
+kubectl delete pod ${IMG_NAME_WITHOUT_USERNAME}-master
+for w in "${NUM_WORKER_PODS}"; do
+    kubectl delete pod ${IMG_NAME_WITHOUT_USERNAME}-worker$w
+done
 
-# Delete existing master and workers deployments 
-# do not terminate the script if they did not exist
-kubectl delete namespace compss-${IMG_WITHOUT_TAG} || true
-#ASSERT "There was an error cleaning the environment from previous executions."
+# Create role and binding for Cloud Connector
+kubectl apply -f $TMP_DIR/sa-role.yaml
+
+echo ; ECHO "Executing application in Kubernetes cluster..." ; echo
+
+# Deploy compss Pods and Service
+kubectl apply -f ${TMP_DIR}/deployments.yaml
+ASSERT "There was an error executing the application. Check the logs or the deployment output."
 echo
 sleep 2
 
-ECHO "Executing application in Kubernetes cluster..." ; echo
-
-# Create specific namespace in kubernetes
-kubectl create namespace compss-${IMG_WITHOUT_TAG} || true
-
-# Create storage class local-path for workers
-# kubectl apply -f kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.24/deploy/local-path-storage.yaml
-
-# Deploy compss deployments and service
-kubectl apply -f ${TMP_DIR}/deployments.yml
-ASSERT "There was an error executing the application. Check the logs or the deployment output."
-echo
-sleep 5
-
-ECHO "Waiting application to finish..."
+ECHO "Waiting for the application to finish..." ; echo
 get_worker_status 5
 while [[ "${WORKER_POD_STATUS}" == "Running" ]]; do
 	get_worker_status 5
 done
-ECHO "Application finished!"
+ECHO "Application finished!"; echo
 
 # Get results
 retrieve_results
 
 ECHO "Cleaning environment from the execution..." ; echo
-kubectl delete namespace compss-${IMG_WITHOUT_TAG}
-# ASSERT "There was an error cleaning the environment from the executions."
+kubectl delete svc ${IMG_NAME_WITHOUT_USERNAME}-svc
+kubectl delete pod ${IMG_NAME_WITHOUT_USERNAME}-master
+for w in "${NUM_WORKER_PODS}"; do
+    kubectl delete pod ${IMG_NAME_WITHOUT_USERNAME}-worker$w
+done
 
 exit 0

@@ -30,7 +30,7 @@ RUNCOMPSS_ARGS=" --resources=$ABS_CONTEXT/resources.xml $RUNCOMPSS_ARGS"
 RUNCOMPSS_ARGS=" --project=$ABS_CONTEXT/project.xml  $RUNCOMPSS_ARGS"
 RUNCOMPSS_ARGS=" --master_name=master $RUNCOMPSS_ARGS"
 # Execute the runcompss command itself, from the context directory
-MASTER_COMMAND="${MASTER_COMMAND} cd ${ABS_CONTEXT}; sleep 30 ; /opt/COMPSs/Runtime/scripts/user/runcompss $RUNCOMPSS_ARGS 2>&1;"
+MASTER_COMMAND="${MASTER_COMMAND} cd ${ABS_CONTEXT}; sleep 15 ; /opt/COMPSs/Runtime/scripts/user/runcompss $RUNCOMPSS_ARGS 2>&1;"
 
 # After the execution ends, stop all the workers. This is, stop their sshd
 # Concatenating with ; to ALWAYS shutdown nodes even if the above commands fail
@@ -45,15 +45,14 @@ MASTER_COMMAND="${MASTER_COMMAND} sleep 60;  exit 0"
 # and one deployment for workers with NUM_WORKER_CONTAINERS replicas
 #
 
-IMG_WITHOUT_TAG="$(echo "$APP_IMAGE_NAME" | awk -F'[:/]' '{print $2}')"
+IMG_NAME_WITHOUT_USERNAME="$(echo "$APP_IMAGE_NAME" | sed -e 's|[A-Za-z0-9_]*/||g'| sed -e 's|[:.]|_|g')"
 
 # Create master Pod
 echo -e "\
 apiVersion: v1
 kind: Pod
 metadata:
-  name: master
-  namespace: compss-${IMG_WITHOUT_TAG}
+  name: ${IMG_NAME_WITHOUT_USERNAME}-master
   labels:
     app: compss
     node: master
@@ -63,7 +62,7 @@ spec:
   restartPolicy: Never
   dnsConfig:
     searches:
-    - compss-svc.compss-${IMG_WITHOUT_TAG}.svc.cluster.local
+    - ${IMG_NAME_WITHOUT_USERNAME}-svc.default.svc.cluster.local
   containers:
   - name: master
     image: ${APP_IMAGE_NAME}
@@ -81,8 +80,7 @@ for i in $(seq 1 "${NUM_WORKERS}"); do
 apiVersion: v1
 kind: Pod
 metadata:
-  name: worker$i
-  namespace: compss-${IMG_WITHOUT_TAG}
+  name: ${IMG_NAME_WITHOUT_USERNAME}-worker$i
   labels:
     app: compss
     node: worker
@@ -92,7 +90,7 @@ spec:
   restartPolicy: Never
   dnsConfig:
     searches:
-    - compss-svc.compss-${IMG_WITHOUT_TAG}.svc.cluster.local
+    - ${IMG_NAME_WITHOUT_USERNAME}-svc.default.svc.cluster.local
   # Make worker nodes run in different nodes
   affinity:
     podAntiAffinity:
@@ -127,8 +125,7 @@ echo -e "\
 apiVersion: v1
 kind: Service
 metadata:
-  name: compss-svc
-  namespace: compss-${IMG_WITHOUT_TAG}
+  name: ${IMG_NAME_WITHOUT_USERNAME}-svc
 spec:
   clusterIP: None  # This makes it a headless service
   selector:

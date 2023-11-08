@@ -1,0 +1,29 @@
+#!/bin/bash -e
+
+# Create Role that allows to handle Pods
+echo -e "\
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-role
+rules:
+- apiGroups: [\"\"]
+  resources: [\"pods\"]
+  verbs: [\"list\", \"get\", \"create\", \"delete\"]
+"
+
+# Create RoleBinding to the default ServiceAccount
+echo -e "\
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-rolebinding
+subjects:
+- kind: ServiceAccount
+  name: default
+roleRef:
+  kind: Role
+  name: pod-role
+  apiGroup: rbac.authorization.k8s.io
+"
