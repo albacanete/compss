@@ -28,6 +28,7 @@ import inspect
 import logging
 import pickle
 import os
+import re
 import sys
 import types
 from base64 import b64encode
@@ -63,9 +64,11 @@ from pycompss.runtime.task.arguments import is_kwarg
 from pycompss.runtime.task.arguments import is_vararg
 from pycompss.runtime.task.commons import get_default_direction
 from pycompss.runtime.task.definitions.core_element import CE
+from pycompss.runtime.task.definitions.constraints import ConstraintDescription
 from pycompss.runtime.task.definitions.arguments import TaskArguments
 from pycompss.runtime.task.definitions.function import FunctionDefinition
 from pycompss.runtime.task.features import TASK_FEATURES
+from pycompss.runtime.task.keys import PARAM_ALIAS_KEYS
 from pycompss.runtime.task.parameter import COMPSsFile
 from pycompss.runtime.task.parameter import JAVA_MAX_INT
 from pycompss.runtime.task.parameter import JAVA_MAX_LONG
@@ -186,6 +189,7 @@ class TaskMaster:
     """
 
     __slots__ = [
+        "user_function",
         "core_element",
         "decorator_arguments",
         "decorated_function",
@@ -193,15 +197,23 @@ class TaskMaster:
         "param_varargs",
         "param_defaults",
         "first_arg_name",
+        "interactive_task_file",
         "parameters",
         "returns",
+        "constraint_args",
+        "registered_signatures",
     ]
 
     def __init__(
         self,
+        user_function: typing.Callable,
         core_element: CE,
         decorator_arguments: TaskArguments,
         decorated_function: FunctionDefinition,
+        registered_signatures: typing.Dict[
+            str, typing.Dict[str, typing.List[str]]
+        ] = {},
+        constraint_args: typing.Dict[str, ConstraintDescription] = {},
     ) -> None:
         """Task at master constructor.
 
@@ -209,6 +221,7 @@ class TaskMaster:
         :param decorator_arguments: Decorator arguments.
         :param decorated_function: Decorated function.
         """
+        self.user_function = user_function
         # Task won't be registered until called from the master for the first
         # time or have a different signature
         self.core_element = core_element
@@ -220,16 +233,19 @@ class TaskMaster:
         self.param_varargs = ""  # type: str
         self.param_defaults = None  # type: typing.Optional[tuple]
         self.first_arg_name = ""
+        self.interactive_task_file = ""
         self.parameters = (
             OrderedDict()
         )  # type: typing.OrderedDict[str, Parameter]
         self.returns = (
             OrderedDict()
         )  # type: typing.OrderedDict[str, Parameter]
+        self.registered_signatures = registered_signatures
+        self.constraint_args = constraint_args
 
     def call(
         self, args: tuple, kwargs: dict
-    ) -> typing.Tuple[typing.Any, CE, FunctionDefinition]:
+    ) -> typing.Tuple[typing.Any, CE, FunctionDefinition, dict, dict]:
         """Run the task as master.
 
         This part deals with task calls in the master's side
@@ -247,6 +263,7 @@ class TaskMaster:
             # And gives non-None default values to them if necessary
             with EventMaster(TRACING_MASTER.inspect_function_arguments):
                 self.inspect_user_function_arguments()
+
                 # It will be easier to deal with functions if we pretend that
                 # all have the signature f(positionals, *variadic, **named).
                 # This is why we are substituting Nones with default stuff.
@@ -261,12 +278,25 @@ class TaskMaster:
                 if self.param_defaults is None:
                     self.param_defaults = ()
 
+            # Inspect the constraints to see if there are any dynamic
+            # constraints, in order to get the value from the given
+            # parameter name.
+            with EventMaster(TRACING_MASTER.inspect_constraints):
+                self.inspect_constraints(args, kwargs)
+
             # Compute the function path, class (if any), and name
             with EventMaster(TRACING_MASTER.get_function_information):
                 self.compute_user_function_information(args)
 
+            # Extract the core element (has to be extracted before processing
+            # the kwargs to avoid issues processing the parameters)
+            with EventMaster(TRACING_MASTER.extract_core_element):
+                ce = kwargs.pop(CORE_ELEMENT_KEY, None)
+                pre_defined_ce = self.extract_core_element(ce)
+
             with EventMaster(TRACING_MASTER.get_function_signature):
                 impl_signature, impl_type_args = self.get_signature()
+
                 if __debug__:
                     logger.debug(
                         "TASK: %s of type %s, in module %s, in class %s",
@@ -297,12 +327,6 @@ class TaskMaster:
                         self.decorated_function.module = inter_mod
                     self.decorated_function.interactive = inter
 
-            # Extract the core element (has to be extracted before processing
-            # the kwargs to avoid issues processing the parameters)
-            with EventMaster(TRACING_MASTER.extract_core_element):
-                ce = kwargs.pop(CORE_ELEMENT_KEY, None)
-                pre_defined_ce = self.extract_core_element(ce)
-
             # Prepare the core element registration information
             with EventMaster(TRACING_MASTER.prepare_core_element):
                 self.get_code_strings()
@@ -323,10 +347,14 @@ class TaskMaster:
                         # calls explicitly to this call from his call.
                         CONTEXT.add_to_register_later((self, impl_signature))
                     else:
-                        self.register_task()
-                        self.decorated_function.registered = True
-                        self.decorated_function.signature = impl_signature
-
+                        if impl_signature not in self.registered_signatures:
+                            self.register_task()
+                            self.decorated_function.registered = True
+                            self.decorated_function.signature = impl_signature
+                            self.register_constraints()
+                        elif __debug__:
+                            logger.debug("Task already registered")
+            # _________________________________________________________________________________________________________________________________________
             # Did we call this function to only register the associated core
             # element? (This can happen with @implements)
             # Do not move this import:
@@ -353,7 +381,9 @@ class TaskMaster:
                 with EventMaster(TRACING_MASTER.process_parameters):
                     code_strings = self.decorated_function.code_strings
                     self.process_parameters(
-                        args, kwargs, code_strings=code_strings
+                        args,
+                        kwargs,
+                        code_strings=code_strings,
                     )
 
                 # Deal with the return part.
@@ -449,7 +479,150 @@ class TaskMaster:
             future_object,
             self.core_element,
             self.decorated_function,
+            self.registered_signatures,
+            self.constraint_args,
         )
+
+    def register_constraints(self):
+        """Register constraints signature.
+
+        Stores the signature, so it will not be registered
+        again.
+
+        :return: the signatures are updated.
+        """
+        if __debug__:
+            logger.debug("Registering signature")
+        signature = self.decorated_function.signature
+        self.registered_signatures[signature] = {}
+        constraints = self.core_element.get_impl_constraints()
+        for a in constraints:
+            self.registered_signatures[signature][a] = []
+            self.registered_signatures[signature][a].append(constraints[a])
+
+    def inspect_constraints(self, args: tuple, kwargs: dict) -> None:
+        """Get constraint arguments.
+
+        Inspect the arguments in the constraints and store them
+        with the updated parameter in the core element.
+
+        Store the names of the arguments in the constraints
+        and if they are static, in order to be accessed to
+        check if the values have changed.
+
+        :return: the attributes to be reused.
+        """
+        if CORE_ELEMENT_KEY in kwargs:
+            if __debug__:
+                logger.debug("Inspecting constraint arguments first time")
+            constraints = kwargs[CORE_ELEMENT_KEY].get_impl_constraints()
+            for key, value in constraints.items():
+                self.constraint_args[key] = ConstraintDescription(value)
+                if (
+                    isinstance(value, int)
+                    or (isinstance(value, str) and value.isdigit())
+                    or (isinstance(value, str) and value.startswith("$"))
+                    or (
+                        key != "computing_units"
+                        and key != "computingUnits"
+                        and key != "memory_size"
+                        and key != "memorySize"
+                        and key != "storage_size"
+                        and key != "storageSize"
+                    )
+                ):
+                    if __debug__:
+                        logger.debug(
+                            "Detected constraint as static value or env var"
+                        )
+                elif value in kwargs:
+                    if __debug__:
+                        logger.debug(
+                            "Detected dynamic constraint passed as a dict"
+                        )
+                    constraints[key] = kwargs[value]
+                    self.constraint_args[key].set_is_static(False)
+                elif value in self.param_args:
+                    if __debug__:
+                        logger.debug(
+                            "Detected dynamic constraint passed as a value"
+                        )
+                    index = self.param_args.index(value)
+                    constraints[key] = args[index]
+                    self.constraint_args[key].set_is_static(False)
+                elif value in self.user_function.__globals__:
+                    constraints[key] = int(
+                        self.user_function.__globals__[value]
+                    )
+                    self.constraint_args[key].set_is_static(False)
+                else:
+                    try:
+                        args_dict = {
+                            self.param_args[i]: args[i]
+                            for i in range(len(self.param_args))
+                        }
+                    except IndexError:
+                        args_dict = kwargs
+                    else:
+                        args_dict.update(kwargs)
+                    try:
+                        constraints[key] = int(
+                            eval(value, {"__builtins__": {}}, args_dict)
+                        )
+                        self.constraint_args[key].set_is_static(False)
+                        if __debug__:
+                            logger.debug(
+                                "Detected dynamic constraint as an expression"
+                            )
+                    except NameError:
+                        if __debug__:
+                            logger.debug(
+                                "Parameter not found, treating value %s as "
+                                "static string" % value
+                            )
+            kwargs[CORE_ELEMENT_KEY].set_impl_constraints(constraints)
+        elif self.core_element is not None:
+            constraints = self.core_element.get_impl_constraints()
+            for key, value in constraints.items():
+                if not self.constraint_args[key].get_is_static():
+                    param_name = self.constraint_args[key].get_param_name()
+                    if param_name in kwargs:
+                        if value != kwargs[param_name]:
+                            constraints[key] = kwargs[param_name]
+                    elif param_name in self.param_args:
+                        index = self.param_args.index(str(param_name))
+                        if value != args[index]:
+                            constraints[key] = args[index]
+                    elif param_name in self.user_function.__globals__:
+                        constraints[key] = int(
+                            self.user_function.__globals__[str(param_name)]
+                        )
+                    else:
+                        try:
+                            args_dict = {
+                                self.param_args[i]: args[i]
+                                for i in range(len(self.param_args))
+                            }
+                        except IndexError:
+                            args_dict = kwargs
+                        else:
+                            args_dict.update(kwargs)
+                        try:
+                            constraints[key] = int(
+                                eval(
+                                    str(param_name),
+                                    {"__builtins__": {}},
+                                    args_dict,
+                                )
+                            )
+                        except NameError:
+                            if __debug__:
+                                logger.debug(
+                                    "Parameter not found, treating value %s as"
+                                    " static string" % value
+                                )
+
+            self.core_element.set_impl_constraints(constraints)
 
     def check_if_interactive(self) -> typing.Tuple[bool, types.ModuleType]:
         """Check if running in interactive mode.
@@ -483,7 +656,8 @@ class TaskMaster:
         # We need to find out the real module name from launched
         path = LAUNCH_STATUS.get_app_path()
         # Get the file name
-        file_name = os.path.splitext(os.path.basename(path))[0]
+        file_path, full_file_name = os.path.split(path)
+        file_name, file_name_ext = os.path.splitext(full_file_name)
         # Do any necessary pre-processing action before executing any code
         if (
             file_name.startswith(CONSTANTS.interactive_file_name)
@@ -495,9 +669,25 @@ class TaskMaster:
             # In this case it is necessary to do a pre-processing step
             # that consists of putting all user code that may be executed
             # in the worker on a file.
-            # This file has to be visible for all workers.
+            # This file will be sent to all workers as first parameter.
+
+            self.interactive_task_file = path
+            # Update the code also calls compss_delete_object if the file
+            # "path" is updated.
             update_tasks_code_file(self.decorated_function.function, path)
-            print(f"Found task: {self.decorated_function.function.__name__}")
+            # # It is possible to create a specific file per task
+            # file_name_fields = file_name.split("_")
+            # file_name_fields.insert(1, self.decorated_function.function_name)
+            # file_name_fields.insert(2, str(time.time_ns()))
+            # updated_file_name = "_".join(file_name_fields)
+            # updated_path = os.path.join(
+            #     file_path, updated_file_name + file_name_ext
+            # )
+            # # Copy file to accompany the task
+            # shutil.copyfile(path, updated_path)
+
+            print(f"Found task: {self.decorated_function.function_name}")
+            # print(f"Written in file: {self.interactive_task_file}")
 
     def extract_core_element(
         self, ce: typing.Optional[CE]
@@ -832,6 +1022,25 @@ class TaskMaster:
             + list(self.decorator_arguments.parameters.keys()),
             "@task",
         )
+        # Add interactive FILE_IN parameter if necessary
+        if self.interactive_task_file != "":
+            self.add_synthetic_parameter_interactive_file()
+
+    def add_synthetic_parameter_interactive_file(self) -> None:
+        """Include a synthetic Parameter object for interactive source file.
+
+        This function includes a special FILE_IN parameter with the interactive
+        source file. This parameter will be removed in the worker side.
+        However, it will be used to transfer the interactive source file
+        automatically by the runtime.
+
+        :return: None
+        """
+        direction = PARAM_ALIAS_KEYS.FILE_IN
+        param = get_new_parameter(direction)
+        param.file_name = COMPSsFile(str(self.interactive_task_file))
+        param.extra_content_type = "FILE"
+        self.parameters[CONSTANTS.compss_interactive_source_file] = param
 
     def build_parameter_object(
         self, arg_name: str, arg_object: typing.Any, code_strings=True
@@ -1070,6 +1279,18 @@ class TaskMaster:
             # frames are included, but not class names found.
             impl_signature = ".".join([module_name, function_name])
             impl_type_args = [module_name, function_name]
+        constraints = self.core_element.get_impl_constraints()
+        for key, value in constraints.items():
+            if not self.constraint_args[key].get_is_static():
+                impl_signature += "."
+                if key.__contains__("_"):
+                    impl_signature += key.split("_", 1)[0][:1]
+                    impl_signature += key.split("_", 1)[1][:1]
+                else:
+                    upper_letter = re.findall("[A-Z]+", key)
+                    impl_signature += key[:1]
+                    impl_signature += upper_letter[0][:1]
+                impl_signature += str(value)
         return impl_signature, impl_type_args
 
     def update_core_element(
@@ -1958,6 +2179,11 @@ class TaskMaster:
             FunctionType.CLASS_METHOD,
         ):
             slf_name = arg_names.pop(0)
+        # Put the CONSTANTS.compss_interactive_source_file in first position
+        # if exists
+        if CONSTANTS.compss_interactive_source_file in arg_names:
+            arg_names.remove(CONSTANTS.compss_interactive_source_file)
+            arg_names.insert(0, CONSTANTS.compss_interactive_source_file)
         # Fill the values, compss_types, compss_directions, compss_streams and
         # compss_prefixes from function parameters
         for name in arg_names:

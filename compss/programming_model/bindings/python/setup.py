@@ -100,8 +100,8 @@ if DLB_HOME is not None:
         sources=["src/ext/dlb_affinity.c"],
     )
 
-# EAR affinity extension
-EAR_HOME = os.environ.get("EAR_HOME", None)  # EAR_INSTALL_PATH
+# EAR extension
+EAR_HOME = os.environ.get("EAR_INSTALL_PATH", None)
 EAR_EXT = None
 if EAR_HOME is not None:
     EAR_EXT = Extension(
@@ -160,7 +160,7 @@ AUTHOR = "Workflows and Distributed Computing Group (WDC) - Barcelona Supercompu
 setup(
     # Metadata
     name="pycompss",
-    version="3.2.rc2309",
+    version="3.2.rc2311",
     description="Python Binding for COMP Superscalar Runtime",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",

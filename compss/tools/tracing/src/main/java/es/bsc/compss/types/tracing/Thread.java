@@ -21,22 +21,22 @@ import java.util.LinkedList;
 import java.util.List;
 
 
-public class Thread implements ApplicationStructure {
+public class Thread<I extends ThreadIdentifier> implements ApplicationStructure {
 
-    private ThreadIdentifier identifier;
+    private I identifier;
     private String label;
 
 
-    public Thread(ThreadIdentifier identifier, String label) {
+    public Thread(I identifier, String label) {
         this.identifier = identifier;
         this.label = label;
     }
 
-    public void setIdentifier(ThreadIdentifier identifier) {
+    public void setIdentifier(I identifier) {
         this.identifier = identifier;
     }
 
-    public ThreadIdentifier getIdentifier() {
+    public I getIdentifier() {
         return identifier;
     }
 

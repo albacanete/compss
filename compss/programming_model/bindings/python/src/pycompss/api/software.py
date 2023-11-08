@@ -103,6 +103,8 @@ class Software(
         "parameters",
         "file_path",
         "is_workflow",
+        "registered_signatures",
+        "constraint_args",
     ]
 
     def __init__(self, *args: typing.Any, **kwargs: typing.Any) -> None:
@@ -134,6 +136,9 @@ class Software(
         self.scope = CONTEXT.in_pycompss()
         self.core_element = None  # type: typing.Any
         self.core_element_configured = False
+
+        self.registered_signatures = {}
+        self.constraint_args = {}
 
         # no need to parse the config file in the worker. all the @task params
         # are passed inside "kwargs"
@@ -303,14 +308,19 @@ class Software(
             # regular task definition inside a config file
             self.__check_core_element__(kwargs, user_function)
             master = TaskMaster(
+                user_function,
                 self.core_element,
                 self.decorator_arguments,
                 self.decorated_function,
+                self.registered_signatures,
+                self.constraint_args,
             )
             (
                 future_object,
                 self.core_element,
                 self.decorated_function,
+                self.registered_signatures,
+                self.constraint_args,
             ) = master.call(args, kwargs)
 
             del master
@@ -358,12 +368,14 @@ class Software(
         self.parameters = config.get(LABELS.parameters, {})
         exec_type = execution.pop(LABELS.type, None)
         if exec_type is None:
-            print("Execution type not provided for @software task")
+            print("WARN: Execution type not provided for @software task")
         elif exec_type == LABELS.task:
             self.task_type, self.decor = SUPPORTED_DECORATORS[exec_type]
-            print("Executing task function..")
+            if __debug__:
+                logger.debug("Executing Software as task function ...")
         elif exec_type == "workflow":
-            print("Executing workflow..")
+            if __debug__:
+                logger.debug("Executing Software as Workflow ...")
             self.is_workflow = True
             return
         elif exec_type.lower() not in SUPPORTED_DECORATORS:

@@ -16,7 +16,7 @@
  */
 package es.bsc.compss.types.tracing;
 
-public abstract class ThreadIdentifier {
+public interface ThreadIdentifier {
 
     /**
      * Returns the position of the thread in the system's organization at a certain level depth.
@@ -24,5 +24,5 @@ public abstract class ThreadIdentifier {
      * @param level depth level in the system organization
      * @return position of the thread in the system's organization at a certain level depth;
      */
-    public abstract int getIdAtLevel(int level);
+    public int getIdAtLevel(int level);
 }

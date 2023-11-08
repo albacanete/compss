@@ -57,5 +57,9 @@ def docker_init_parser():
                              dest="privileged",
                              action="store_true",
                              help='Run container with privileged permissions.')
+    parser_init.add_argument("-ui", "--update_image",
+                             dest="update_image",
+                             action="store_true",
+                             help='Update image before deployment.')
     
     return parser_init

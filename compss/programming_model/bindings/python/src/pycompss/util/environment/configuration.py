@@ -596,9 +596,14 @@ def create_init_config_file(
         if comm == "GAT":
             gat = "-Dcompss.comm=es.bsc.compss.gat.master.GATAdaptor"
             jvm_options_file.write(gat + "\n")
-        else:
+        elif comm == "NIO":
             nio = "-Dcompss.comm=es.bsc.compss.nio.master.NIOAdaptor"
             jvm_options_file.write(nio + "\n")
+        elif comm == "GOS":
+            gos = "-Dcompss.comm=es.bsc.compss.gos.master.GOSAdaptor"
+            jvm_options_file.write(gos + "\n")
+        else:
+            jvm_options_file.write("-Dcompss.comm=" + comm + "\n")
 
         jvm_options_file.write("-Dcompss.masterName=" + master_name + "\n")
         jvm_options_file.write("-Dcompss.masterPort=" + master_port + "\n")
@@ -780,6 +785,8 @@ def create_init_config_file(
             got_extrae_final_directory = __process_extrae_file(
                 extrae_xml_path, extrae_xml_final_path, extrae_trace_path
             )
+            if extrae_cfg == "null":
+                os.environ["EXTRAE_CONFIG_FILE"] = extrae_xml_final_path
         else:
             # Any other case: deactivated
             jvm_options_file.write("-Dcompss.tracing=false" + "\n")
