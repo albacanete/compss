@@ -240,7 +240,7 @@ ECHO "Cleaning environment from previous executions..." ; echo
 # Delete existing master and workers deployments 
 # do not terminate the script if they did not exist
 kubectl delete namespace compss-${IMG_WITHOUT_TAG} || true
-# ASSERT "There was an error cleaning the environment from previous executions."
+#ASSERT "There was an error cleaning the environment from previous executions."
 echo
 sleep 2
 

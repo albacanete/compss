@@ -30,7 +30,7 @@ RUNCOMPSS_ARGS=" --resources=$ABS_CONTEXT/resources.xml $RUNCOMPSS_ARGS"
 RUNCOMPSS_ARGS=" --project=$ABS_CONTEXT/project.xml  $RUNCOMPSS_ARGS"
 RUNCOMPSS_ARGS=" --master_name=master $RUNCOMPSS_ARGS"
 # Execute the runcompss command itself, from the context directory
-MASTER_COMMAND="${MASTER_COMMAND} cd ${ABS_CONTEXT}; sleep 60 ; /opt/COMPSs/Runtime/scripts/user/runcompss $RUNCOMPSS_ARGS 2>&1;"
+MASTER_COMMAND="${MASTER_COMMAND} cd ${ABS_CONTEXT}; sleep 30 ; /opt/COMPSs/Runtime/scripts/user/runcompss $RUNCOMPSS_ARGS 2>&1;"
 
 # After the execution ends, stop all the workers. This is, stop their sshd
 # Concatenating with ; to ALWAYS shutdown nodes even if the above commands fail
