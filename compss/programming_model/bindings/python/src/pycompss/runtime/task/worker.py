@@ -390,7 +390,6 @@ class TaskWorker:
             objects = getByID(*identifiers)
             # Just update the Parameter object with its content
             for obj, value in zip(objects, pscos):
-            for obj, value in zip(objects, pscos):
                 obj.content = value
 
         # Deal with all the parameters that are NOT returns
@@ -606,7 +605,6 @@ class TaskWorker:
                     )
 
             with open(col_f_name, "r") as col_f_name_fd:
-                for i, line in enumerate(col_f_name_fd):
                 for i, line in enumerate(col_f_name_fd):
                     if in_mpi_collection_env and i not in rank_distribution:
                         # Isn't this my offset? skip
@@ -1500,7 +1498,6 @@ class TaskWorker:
             # Note that we are implicitly assuming that the length of the user
             # returns matches the number of return parameters
             for obj, param in zip(user_returns, ret_params):
-            for obj, param in zip(user_returns, ret_params):
                 # Store the object int ret_params (included in args)
                 param.content = obj
                 param.direction = parameter.DIRECTION.OUT
@@ -1668,7 +1665,6 @@ class TaskWorker:
             :returns: The collection representation.
             """
             coll = []  # type: list
-            for _cont, _elem in zip(_arg.content, _arg.collection_content):
             for _cont, _elem in zip(_arg.content, _arg.collection_content):
                 if isinstance(_elem, str):
                     coll.append([parameter.TYPE.FILE, "null"])
@@ -1933,7 +1929,6 @@ def get_dict_collection_objects(
                 ]
             )
         # Loop recursively
-        for new_con, _elem in zip(elements, elements_parameters):
         for new_con, _elem in zip(elements, elements_parameters):
             _elem.content = new_con
             for sub_el, sub_param in get_dict_collection_objects(
