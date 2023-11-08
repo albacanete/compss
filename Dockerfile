@@ -1,42 +1,90 @@
-ARG ROOT_CONTAINER=registry.gitlab.bsc.es/ppc/software/compss/conn-ubuntu-base:3.0-amd
-FROM $ROOT_CONTAINER
-MAINTAINER COMPSs Support <support-compss@bsc.es>
+ARG DEBIAN_FRONTEND=noninteractive
+ARG BASE=base20
+ARG BASE_VERSION=230308-090438
 
-ARG ARCH=amd64
-ARG FULL_ARCH=x86_64
-ARG release=false
+FROM compss/${BASE}_ci:${BASE_VERSION} as ci
+ENV GRADLE_HOME /opt/gradle
+ENV PATH $PATH:/opt/gradle/bin
 
-# Copy framework files for installation and testing
 COPY . /framework
 
-ENV GRADLE_HOME /opt/gradle
-ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-${ARCH}/
-
-ENV EXTRAE_MPI_HEADERS /usr/include/${FULL_ARCH}-linux-gnu/mpi
 ENV PATH $PATH:/opt/COMPSs/Runtime/scripts/user:/opt/COMPSs/Bindings/c/bin:/opt/COMPSs/Runtime/scripts/utils:/opt/gradle/bin
 ENV CLASSPATH $CLASSPATH:/opt/COMPSs/Runtime/compss-engine.jar
-ENV LD_LIBRARY_PATH /opt/COMPSs/Bindings/bindings-common/lib:$JAVA_HOME/jre/lib/${ARCH}/server
+ENV LD_LIBRARY_PATH /opt/COMPSs/Bindings/bindings-common/lib:$LD_LIBRARY_PATH
 ENV COMPSS_HOME=/opt/COMPSs/
 
-# Install Kubernetes connector
-COPY utils/kubernetes/kubernetes-conn.jar /tmp/kubernetes-conn.jar
-RUN mvn install:install-file -DgroupId=es.bsc.conn -DartifactId=kubernetes-conn -Dversion=1.8-11 -Dpackaging=jar -Dfile=/tmp/kubernetes-conn.jar
-
 # Install COMPSs
-# Install Kubernetes connector
-COPY utils/kubernetes/k8s-conn.jar /tmp/k8s-conn.jar
-RUN mvn install:install-file -DgroupId=es.bsc.conn -DartifactId=k8s-conn -Dversion=1.8-9 -Dpackaging=jar -Dfile=/tmp/k8s-conn.jar
-
 RUN cd /framework && \
-    apt update -y && apt install git -y && \
-    export EXTRAE_MPI_HEADERS=/usr/include/${FULL_ARCH}-linux-gnu/mpi && \
+    ./submodules_get.sh && \
+    #export EXTRAE_MPI_HEADERS=/usr/include/x86_64-linux-gnu/mpi && \
     /framework/builders/buildlocal /opt/COMPSs && \
     mv /root/.m2 /home/jenkins && \
     chown -R jenkins: /framework && \
     chown -R jenkins: /home/jenkins/ 
 
-RUN mv /tmp/k8s-conn.jar /opt/COMPSs/Runtime/cloud-conn/k8s-conn.jar 
-
 # Expose SSH port and run SSHD
 EXPOSE 22
 CMD ["/usr/sbin/sshd","-D"]
+
+FROM compss/${BASE}_all:${BASE_VERSION} as compss
+
+COPY --from=ci /opt/COMPSs /opt/COMPSs
+COPY --from=ci /etc/init.d/compss-monitor /etc/init.d/compss-monitor
+COPY --from=ci /etc/profile.d/compss.sh /etc/profile.d/compss.sh
+
+#ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/
+ENV PATH $PATH:/opt/COMPSs/Runtime/scripts/user:/opt/COMPSs/Bindings/c/bin:/opt/COMPSs/Runtime/scripts/utils
+ENV CLASSPATH $CLASSPATH:/opt/COMPSs/Runtime/compss-engine.jar
+ENV LD_LIBRARY_PATH /opt/COMPSs/Bindings/bindings-common/lib:$LD_LIBRARY_PATH
+ENV COMPSS_HOME=/opt/COMPSs/
+
+EXPOSE 22
+CMD ["/usr/sbin/sshd","-D"]
+
+FROM compss/${BASE}_tutorial:${BASE_VERSION} as compss-tutorial
+
+COPY --from=ci /opt/COMPSs /opt/COMPSs
+COPY --from=ci /etc/init.d/compss-monitor /etc/init.d/compss-monitor
+COPY --from=ci /etc/profile.d/compss.sh /etc/profile.d/compss.sh
+
+#ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/
+ENV PATH $PATH:/opt/COMPSs/Runtime/scripts/user:/opt/COMPSs/Bindings/c/bin:/opt/COMPSs/Runtime/scripts/utils:/root/.local/bin
+ENV CLASSPATH $CLASSPATH:/opt/COMPSs/Runtime/compss-engine.jar
+ENV LD_LIBRARY_PATH /opt/COMPSs/Bindings/bindings-common/lib:$LD_LIBRARY_PATH
+ENV COMPSS_HOME=/opt/COMPSs/
+ENV PYTHONPATH=$COMPSS_HOME/Bindings/python/3:$PYTHONPATH
+
+RUN python3 -m pip install --no-cache-dir dislib && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends jq bc && \
+    apt-get autoclean && \
+    rm -rf /var/lib/apt/lists/*
+
+
+EXPOSE 22
+EXPOSE 43000-44000
+CMD ["/usr/sbin/sshd","-D"]
+
+FROM compss/${BASE}_rt:${BASE_VERSION} as minimal
+
+COPY --from=ci /opt/COMPSs /opt/COMPSs
+COPY --from=ci /etc/profile.d/compss.sh /etc/profile.d/compss.sh
+
+# ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/
+ENV PATH $PATH:/opt/COMPSs/Runtime/scripts/user:/opt/COMPSs/Bindings/c/bin:/opt/COMPSs/Runtime/scripts/utils
+ENV CLASSPATH $CLASSPATH:/opt/COMPSs/Runtime/compss-engine.jar
+ENV LD_LIBRARY_PATH /opt/COMPSs/Bindings/bindings-common/lib:$LD_LIBRARY_PATH
+ENV COMPSS_HOME=/opt/COMPSs/
+
+
+FROM compss/${BASE}_python:${BASE_VERSION} as pycompss 
+
+COPY --from=ci /opt/COMPSs /opt/COMPSs
+COPY --from=ci /etc/init.d/compss-monitor /etc/init.d/compss-monitor
+COPY --from=ci /etc/profile.d/compss.sh /etc/profile.d/compss.sh
+
+# ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/
+ENV PATH $PATH:/opt/COMPSs/Runtime/scripts/user:/opt/COMPSs/Bindings/c/bin:/opt/COMPSs/Runtime/scripts/utils
+ENV CLASSPATH $CLASSPATH:/opt/COMPSs/Runtime/compss-engine.jar
+ENV LD_LIBRARY_PATH /opt/COMPSs/Bindings/bindings-common/lib:$LD_LIBRARY_PATH
+ENV COMPSS_HOME=/opt/COMPSs/
