@@ -565,6 +565,7 @@ xml_project_add_workers() {
     # Create working dirs
     if [ -z "${CREATE_WORKING_DIRS}" ] || [ "${CREATE_WORKING_DIRS}" == "true" ]; then
       CMD="${LAUNCH_CMD} ${LAUNCH_EXTRA_FLAGS}${LAUNCH_PARAMS}${LAUNCH_SEPARATOR}${worker_node} ${CMD_SEPARATOR}mkdir -m 755 -p ${worker_working_dir}${CMD_SEPARATOR}"
+      CMD="${LAUNCH_CMD} ${LAUNCH_EXTRA_FLAGS}${LAUNCH_PARAMS}${LAUNCH_SEPARATOR}${worker_node} ${CMD_SEPARATOR}mkdir -m 755 -p ${worker_working_dir}${CMD_SEPARATOR}"
       if [ "${log_level}" == "debug" ] || [ "${log_level}" == "trace" ]; then
          echo "Worker WD mkdir: ${CMD}"
       fi
@@ -2416,6 +2417,7 @@ cleanup() {
           echo "[LAUNCH_COMPSS] Removing ${sandboxWD}"
       fi
       # shellcheck disable=SC2086
+      ${LAUNCH_CMD} ${LAUNCH_EXTRA_FLAGS}${LAUNCH_PARAMS}${LAUNCH_SEPARATOR}${node} ${CMD_SEPARATOR}rm -rf ${sandboxWD}${CMD_SEPARATOR}
       ${LAUNCH_CMD} ${LAUNCH_EXTRA_FLAGS}${LAUNCH_PARAMS}${LAUNCH_SEPARATOR}${node} ${CMD_SEPARATOR}rm -rf ${sandboxWD}${CMD_SEPARATOR}
     done
     if [ "${log_level}" != "off" ]; then

@@ -4,10 +4,13 @@
 # SCRIPT CONSTANTS
 #
 GENERATORS_DIR=$(dirname "$0")/../system/kubernetes/
-GENERATE_DEPLOYMENT_YML="$GENERATORS_DIR/generate-deployment-yml"
+GENERATE_DEPLOYMENT_YML="$GENERATORS_DIR/generate-pods-yml"
 DEFAULT_MEM=4
 DEFAULT_CU=1
 DEFAULT_ELASTIC=0
+# TODO:  This command is needed when implementing elasticity and the cloud connector
+# I assume that, for now, Cloud=False always in the resources file
+COMPSS_MASTER_HOSTNAME="none"
 
 #
 # HELPER FUNCTIONS
@@ -23,14 +26,12 @@ and you need to have installed and configured in this computer the kubectl CLI.
 
 Usage: $0
             --worker-containers=N
-            --compss-master=<hostname>
             --image-name=\"DOCKERHUB_USER/IMG-NAME\"
 			[rest of classic runcompss args]
 
 Example: $0
             --worker-containers=5
             --image-name='compss-user-dockerhub/my-app:1.3'
-            --compss-master=nano1
             --classpath=/home/compss-user/my-app-dir/my-app.jar # Here begin classic runcompss arguments...
             -d
             myPackage.MyApp 3 15
@@ -45,9 +46,6 @@ MANDATORY ARGUMENTS:
     --i, --image-name:         Specify the image name of the application image in Dockerhub. Remember you must generate this with runcompss-docker-gen-image.
                                Remember as well that the format must be: \"DOCKERHUB_USERNAME/APP_IMAGE_NAME:TAG\" (the :TAG is optional).
                                Example: --image-name='john123/my-compss-application:1.9'
-
-    --n, --compss-master:      Specify the hostname of the Kubernetes node where the COMPSs master will run as a Pod.
-                               Example: --compss-master=nano1
 
     --c, --context-dir:        Specify the absolute application context directory inside the image.
 	            		       When using an application image, its provider must give you this information.
@@ -73,25 +71,26 @@ OPTIONAL ARGUMENTS:
 
 # Get the name of the master Pod
 get_master_pod_name(){
-    MASTER_POD_NAME=$(kubectl get pods -l app=compss-master -o jsonpath='{.items[0].metadata.name}')
+    MASTER_POD_NAME=$(kubectl -n compss-${IMG_WITHOUT_TAG} get pods -l app=master -o jsonpath='{.items[0].metadata.name}')
     echo "COMPSs master Pod name: $MASTER_POD_NAME"    
 }   
 
 # Get the status of the master Pod
-get_master_status(){
+get_worker_status(){
     wait_before=$1
     if [ -n ${wait_before} ]; then
       sleep ${wait_before}
     fi 
 
-    MASTER_POD_STATUS=$(kubectl get pod "$MASTER_POD_NAME" -o jsonpath='{.status.phase}')
-    echo "COMPSs master Pod status: $MASTER_POD_STATUS"
+    WORKER_POD_STATUS=$(kubectl -n compss-${IMG_WITHOUT_TAG} get pods worker1 -o=jsonpath='{.status.phase}')
+    # WORKER_POD_STATUS=$(kubectl get pods worker1 -o=jsonpath='{.status.phase}')
+    echo "COMPSs worker Pod status: $WORKER_POD_STATUS"
 }
 
 retrieve_results() {
     cd "${TMP_DIR}/.."
 
-    ECHO "Retrieving results from the master pod..."
+    ECHO "Retrieving results from the master Pod..."
 
     # Copying results from master container to this machine... (docker cp)
     #IMG_NAME_WITHOUT_USERNAME="$(echo "$IMAGE_NAME" | sed -e 's|[A-Za-z0-9_]*/||g')"
@@ -100,19 +99,19 @@ retrieve_results() {
     
     rm -rf "$RESULTS_DIR" &> /dev/null
     mkdir -p "$DEBUG_DIR"
-
-    # Get the name of the master pod
-    $(get_master_pod_name)
   
-    kubectl cp "${MASTER_POD_NAME}:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
+    # Get results
+    # kubectl cp "master:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
+    kubectl -n compss-${IMG_WITHOUT_TAG} cp "master:/root/.COMPSs"  "${DEBUG_DIR}" # &> /dev/null
     ASSERT "Results could not be retrieved...Master Pod unreachable"
     
-    # Get logs from the master pod
-    kubectl logs ${MASTER_POD_NAME} 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
+    # Get logs from the master Pod
+    kubectl -n compss-${IMG_WITHOUT_TAG} logs master 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
+    # kubectl logs master 1> "${RESULTS_DIR}"/application_log.out 2>"${RESULTS_DIR}"/application_log.err
     
     # Move .COMPSs contents and remove the .COMPSs directory
-    mv "${DEBUG_DIR}"/.COMPSs/* "${DEBUG_DIR}"
-    rm -rf "${DEBUG_DIR}"/.COMPSs
+    # mv "${DEBUG_DIR}"/.COMPSs/* "${DEBUG_DIR}"
+    # rm -rf "${DEBUG_DIR}"/.COMPSs
 
     echo ; ECHO "Results successfully retrieved!" ; echo
     ECHO "Check the application results in '$RESULTS_DIR'"
@@ -149,10 +148,6 @@ for ARG in "${ALL_ARGS[@]}"; do
     elif [ "$argName" = "image-name" ] || [ "$argName" = "i" ]; then
     	IMAGE_NAME="$argValue"
         RD_GOOD_ARG=1
-    elif [ "$argName" = "compss-master" ] || [ "$argName" = "n" ]; then
-        # export DOCKER_HOST="$argValue" #<ip>:<port>
-        COMPSS_MASTER_HOSTNAME="$argValue"
-        RD_GOOD_ARG=1
     elif [ "$argName" = "context-dir" ] || [ "$argName" = "c" ]; then
         ABS_CONTEXT="$argValue"
         RD_GOOD_ARG=1
@@ -182,7 +177,6 @@ ECHO "Contatiner CPU units:     $COMPUTING_UNITS"
 ECHO "Container memory:         $MEMORY GB"
 ECHO "Image name:               $IMAGE_NAME"
 ECHO "Number of workers:        $NUM_WORKER_PODS"
-ECHO "COMPSs master hostname:   $COMPSS_MASTER_HOSTNAME"
 ECHO "Context directory:        $ABS_CONTEXT"
 ECHO "Creation time:            $CREATION_TIME"
 ECHO "Elastic Pods:             $MAX_VMS"
@@ -200,11 +194,6 @@ fi
 ALL_GOOD=1
 if [ -z "$NUM_WORKER_PODS" ]; then
     ERROR "Indicate the number of workers before runcompss args ('--worker-containers=3' for example)"
-    ALL_GOOD=0
-fi
-
-if [ -z "$COMPSS_MASTER_HOSTNAME" ]; then
-    ERROR "Indicate the hostname of the Kubernetes node where the COMPSs master will run before runcompss args ('--compss-master=nano1 for example)"
     ALL_GOOD=0
 fi
 
@@ -227,6 +216,7 @@ if [ "$ALL_GOOD" = "0" ]; then
 fi
 
 IMG_NAME_WITHOUT_USERNAME="$(echo "$IMAGE_NAME" | sed -e 's|[A-Za-z0-9_]*/||g'| sed -e 's|[:.]|_|g')"
+IMG_WITHOUT_TAG="$(echo "$IMAGE_NAME" | awk -F'[:/]' '{print $2}')"
 
 # Regular workflow
 # The temporary directory for generating the Kubernetes YAML files
@@ -239,40 +229,47 @@ ECHO "Generating deployments.yml file into '${TMP_DIR}' ..." ; echo
 # Generate Kubernetes deployments YAML file
 $GENERATE_DEPLOYMENT_YML "$NUM_WORKER_PODS" "$IMAGE_NAME" "$ABS_CONTEXT" "$COMPUTING_UNITS" "$MEMORY" "$COMPSS_MASTER_HOSTNAME" "$CREATION_TIME" "$MIN_VMS" "$MAX_VMS" "$RUNCOMPSS_ARGS" > "${TMP_DIR}"/deployments.yml
 ASSERT "There was an error creating the Kubernetes deployments YAML file."
+echo 
+sleep 2
 
 # Add a trap for results retrieval
 trap "retrieve_results ; exit 1" SIGINT ERR
 
 ECHO "Cleaning environment from previous executions..." ; echo
 
-# Delete existing master and workers deployments
-kubectl delete deployment compss-master
-kubectl delete deployment compss-worker
-ASSERT "There was an error cleaning the environment from previous executions."
+# Delete existing master and workers deployments 
+# do not terminate the script if they did not exist
+kubectl delete namespace compss-${IMG_WITHOUT_TAG} || true
+#ASSERT "There was an error cleaning the environment from previous executions."
 echo
-
-ECHO "Waiting some seconds for the deletions to take effect"
-sleep 5
-
-# Force master deletion
-kubectl delete pod "$MASTER_POD_NAME" --force --grace-period=0
-ECHO "Waiting some seconds master deletion to take effect"
-sleep 5
+sleep 2
 
 ECHO "Executing application in Kubernetes cluster..." ; echo
+
+# Create specific namespace in kubernetes
+kubectl create namespace compss-${IMG_WITHOUT_TAG} || true
+
+# Create storage class local-path for workers
+# kubectl apply -f kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.24/deploy/local-path-storage.yaml
 
 # Deploy compss deployments and service
 kubectl apply -f ${TMP_DIR}/deployments.yml
 ASSERT "There was an error executing the application. Check the logs or the deployment output."
 echo
-sleep 20
+sleep 5
 
 ECHO "Waiting application to finish..."
-get_master_status 5
-while [[ "${MASTER_POD_STATUS}" == "Running" ]]; do
-	get_master_status 5
+get_worker_status 5
+while [[ "${WORKER_POD_STATUS}" == "Running" ]]; do
+	get_worker_status 5
 done
 ECHO "Application finished!"
-retrieve_results
-exit 0
 
+# Get results
+retrieve_results
+
+ECHO "Cleaning environment from the execution..." ; echo
+kubectl delete namespace compss-${IMG_WITHOUT_TAG}
+# ASSERT "There was an error cleaning the environment from the executions."
+
+exit 0

@@ -955,6 +955,7 @@ class TaskMaster:
         arg_names = self.param_args[:num_positionals]
         arg_objects = args[:num_positionals]
         for arg_name, arg_object in zip(arg_names, arg_objects):
+        for arg_name, arg_object in zip(arg_names, arg_objects):
             self.parameters[arg_name] = self.build_parameter_object(
                 arg_name, arg_object, code_strings=code_strings
             )
@@ -970,6 +971,7 @@ class TaskMaster:
                 # defaults[-2] goes with positionals[-2]
                 # ...
                 # Also, |defaults| <= |positionals|
+                for arg_name, default_value in reversed(
                 for arg_name, default_value in reversed(
                     list(
                         zip(
@@ -995,6 +997,7 @@ class TaskMaster:
         # Process the variadic arguments
         supported_varargs = []
         for i, var_arg in enumerate(args[num_positionals:]):
+        for i, var_arg in enumerate(args[num_positionals:]):
             arg_name = get_vararg_name(self.param_varargs, i)
             self.parameters[arg_name] = self.build_parameter_object(
                 arg_name, var_arg, code_strings=code_strings
@@ -1003,6 +1006,7 @@ class TaskMaster:
                 supported_varargs.append(self.param_varargs)
         # Process keyword arguments
         supported_kwargs = []
+        for name, value in kwargs.items():
         for name, value in kwargs.items():
             arg_name = get_kwarg_name(name)
             self.parameters[arg_name] = self.build_parameter_object(
@@ -2720,6 +2724,7 @@ def _extract_parameter(
         )
         OT.stop_tracking(param.content, collection=True)
         typ = TYPE.COLLECTION
+        for _, x_param in enumerate(param.content):
         for _, x_param in enumerate(param.content):
             x_value, x_type, _, _, _, x_con_type, _, _ = _extract_parameter(
                 x_param, code_strings, param.depth - 1

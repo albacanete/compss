@@ -28,6 +28,8 @@ from pycompss.api.parameter import COLLECTION_OUT
 from pycompss.api.parameter import COLLECTION_IN
 from pycompss.api.parameter import Type
 from pycompss.api.parameter import Depth
+from pycompss.api.parameter import Type
+from pycompss.api.parameter import Depth
 from pycompss.api.task import task
 from pycompss.dds.partition_generators import IPartitionGenerator
 
@@ -35,6 +37,8 @@ MARKER = "COMPSS_DEFAULT_VALUE_TO_BE_USED_AS_A_MARKER"
 FILE_NAME_LENGTH = 5
 
 
+@task(returns=1, collection={Type: COLLECTION_IN, Depth: 1})
+def map_partition(func, partition, collection=None):
 @task(returns=1, collection={Type: COLLECTION_IN, Depth: 1})
 def map_partition(func, partition, collection=None):
     """Map the given function to the partition.
@@ -82,6 +86,7 @@ def distribute_partition(
         col[partitioner_func(key) % nop].append((key, value))
 
 
+@task(first=INOUT, rest={Type: COLLECTION_IN, Depth: 1})
 @task(first=INOUT, rest={Type: COLLECTION_IN, Depth: 1})
 def reduce_dicts(first, rest):
     """Reduce dictionaries.
@@ -166,6 +171,8 @@ def task_collect_samples(partition, num_of_samples, key_func):
 
 @task(collection={Type: COLLECTION_IN, Depth: 1})
 def map_and_save_text_file(func, index, path, partition, collection=None):
+@task(collection={Type: COLLECTION_IN, Depth: 1})
+def map_and_save_text_file(func, index, path, partition, collection=None):
     """Map and save text file.
 
     Same as 'map_partition' function with the only difference that this one
@@ -191,6 +198,8 @@ def map_and_save_text_file(func, index, path, partition, collection=None):
             _.write("\n".join([str(item)]))
 
 
+@task(collection={Type: COLLECTION_IN, Depth: 1})
+def map_and_save_pickle(func, index, path, partition, collection=None):
 @task(collection={Type: COLLECTION_IN, Depth: 1})
 def map_and_save_pickle(func, index, path, partition, collection=None):
     """Map and save pickled file.

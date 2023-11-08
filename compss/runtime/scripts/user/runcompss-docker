@@ -151,7 +151,7 @@ for ARG in "${ALL_ARGS[@]}"; do
     	IMAGE_NAME="$argValue"
         RD_GOOD_ARG=1
     elif [ "$argName" = "swarm-manager" ] || [ "$argName" = "s" ]; then
-        export DOCKER_HOST="$argValue" #<ip>:<port>
+        # export DOCKER_HOST="$argValue" #<ip>:<port>
         SWARM_MANAGER_IP="$argValue"
         RD_GOOD_ARG=1
     elif [ "$argName" = "context-dir" ] || [ "$argName" = "c" ]; then

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -xe
 
 # Setting up COMPSs_HOME
 if [ -z "${COMPSS_HOME}" ]; then
@@ -8,7 +8,6 @@ if [ ! "${COMPSS_HOME: -1}" = "/" ]; then
   COMPSS_HOME="${COMPSS_HOME}/"
 fi
 export COMPSS_HOME=${COMPSS_HOME}
-
 
 # Retrieve script arguments
 resources_file=$1
@@ -36,7 +35,7 @@ if [ "${cloud}" == "True" ]; then
   echo "Adding cloud ..."
   its="small:1:0:0:2.0:1:0.85 medium:2:0:0:3.0:1:0.95 large:4:0:0:4.0:1:1.25 extra_large:8:0:0:8.0:1:2.25"
   # TODO: change add_cloud for Kubernetes
-  add_cloud "Kubernetes" "tcp://$compss_master_ip" "kubernetes-conn.jar" "es.bsc.conn.kubernetes.Kubernetes" "$image_name" "" "$creation_time" "43000" "43003" "" "${its}"
+  add_cloud "Kubernetes" "tcp://$compss_master_ip" "k8s-conn.jar" "es.bsc.conn.kubernetes.Kubernetes" "$image_name" "" "$creation_time" "43000" "43003" "" "${its}"
 fi
 # Close resources (from generate_resources.sh)
 add_footer
