@@ -1,5 +1,5 @@
 /*
- *  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+ *  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -208,6 +208,7 @@ public class GOSInvocation implements Invocation {
                     value = args[appArgsIdx++].charAt(0);
                     break;
                 case STRING_T:
+                case STRING_64_T:
                     int numSubStrings = Integer.parseInt(args[appArgsIdx++]);
                     String aux = "";
                     for (int j = 0; j < numSubStrings; j++) {
@@ -217,17 +218,6 @@ public class GOSInvocation implements Invocation {
                         aux += args[appArgsIdx++];
                     }
                     value = aux;
-                    break;
-                case STRING_64_T:
-                    int total = Integer.parseInt(args[appArgsIdx++]);
-                    StringBuilder temp = new StringBuilder();
-                    for (int j = 0; j < total; j++) {
-                        if (j != 0) {
-                            temp.append(" ");
-                        }
-                        temp.append(args[appArgsIdx++]);
-                    }
-                    value = temp.toString();
                     break;
                 case BYTE_T:
                     value = new Byte(args[appArgsIdx++]);

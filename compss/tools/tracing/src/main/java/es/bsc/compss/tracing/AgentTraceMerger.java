@@ -1,5 +1,5 @@
 /*
- *  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+ *  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import es.bsc.compss.types.tracing.Thread;
 import es.bsc.compss.types.tracing.ThreadIdentifier;
 import es.bsc.compss.types.tracing.Trace;
 import es.bsc.compss.types.tracing.paraver.PRVApplication;
+import es.bsc.compss.types.tracing.paraver.PRVNode;
 import es.bsc.compss.types.tracing.paraver.PRVTask;
 import es.bsc.compss.types.tracing.paraver.PRVThreadIdentifier;
 import es.bsc.compss.types.tracing.paraver.PRVTrace;
@@ -152,8 +153,10 @@ public class AgentTraceMerger extends TraceMerger {
         for (SystemStructure node : global.getSubComponents()) {
             cpuOffset += node.getNumberOfDirectSubcomponents();
         }
-        SystemComposition<?> traceNodes = trace.getInfrastructure();
-        for (SystemStructure node : traceNodes.getSubComponents()) {
+        int nodeOffset = global.getNumberOfDirectSubcomponents();
+        SystemComposition<PRVNode> traceNodes = trace.getInfrastructure();
+        for (PRVNode node : traceNodes.getSubComponents()) {
+            node.applyOffset(nodeOffset);
             global.appendComponent(node);
         }
         return new CPUOffset(cpuOffset);

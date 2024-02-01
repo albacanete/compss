@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-#  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ class _ImplementationTypes:  # pylint: disable=R0903,R0902
         "ompss",
         "opencl",
         "python_mpi",
+        "http",
     ]
 
     def __init__(self) -> None:
@@ -56,6 +57,7 @@ class _ImplementationTypes:  # pylint: disable=R0903,R0902
         self.ompss = "OMPSS"
         self.opencl = "OPENCL"
         self.python_mpi = "PYTHON_MPI"
+        self.http = "HTTP"
 
 
 IMPLEMENTATION_TYPES = _ImplementationTypes()

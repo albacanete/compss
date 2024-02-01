@@ -1,5 +1,5 @@
 /*
- *  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+ *  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -162,7 +162,7 @@ public class MPIInvoker extends Invoker {
         int numMPIFlags = 0;
         String[] mpiflagsArray = null;
         if (mpiFlags != null && !mpiFlags.isEmpty() && !mpiFlags.equals("[unassigned]")) {
-            mpiflagsArray = mpiFlags.split(" ");
+            mpiflagsArray = BinaryRunner.buildAppParams(this.invocation.getParams(), mpiFlags, pythonInterpreter);
             numMPIFlags = mpiflagsArray.length;
         }
 

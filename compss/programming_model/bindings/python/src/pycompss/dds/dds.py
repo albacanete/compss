@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-#  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -897,7 +897,7 @@ class DDS:  # pylint: disable=too-many-public-methods
                     key=lambda kv: key_func(kv[0]), reverse=not ascending
                 )
                 if len(chunk) > 0:
-                    chunks.append(chunk[0])
+                    chunks.append(chunk)
                 if len(chunk) < chunk_size:
                     break
             else:
@@ -907,9 +907,14 @@ class DDS:  # pylint: disable=too-many-public-methods
                     )
                 )
 
-            return heapq.merge(
-                chunks, key=lambda kv: key_func(kv[0]), reverse=not ascending
-            )
+            if len(chunks) == 1:
+                return chunks[0]
+            else:
+                return heapq.merge(
+                    *chunks,
+                    key=lambda kv: key_func(kv[0]),
+                    reverse=not ascending
+                )
 
         partitioned = DDS().load(col_parts, -1).partition_by(range_partitioner)
         return partitioned.map_partitions(sort_partition)

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-#  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -160,7 +160,7 @@ AUTHOR = "Workflows and Distributed Computing Group (WDC) - Barcelona Supercompu
 setup(
     # Metadata
     name="pycompss",
-    version="3.2.rc2311",
+    version="3.3.rc2401",
     description="Python Binding for COMP Superscalar Runtime",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",

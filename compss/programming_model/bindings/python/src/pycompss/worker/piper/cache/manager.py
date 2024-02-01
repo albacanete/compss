@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-#  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ def __get_fraction_cache_size__(device: str, fraction: float) -> int:
             gpu_max_mem = int(CP.cuda.Device().mem_info[1])
             cache_size = gpu_max_mem * fraction
         else:
-            cache_size = 0
+            cache_size = 0.0
 
     return int(cache_size)
 

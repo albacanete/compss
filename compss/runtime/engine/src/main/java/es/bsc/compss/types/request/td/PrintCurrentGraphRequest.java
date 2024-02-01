@@ -1,5 +1,5 @@
 /*
- *  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+ *  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -301,7 +301,15 @@ public class PrintCurrentGraphRequest extends TDRequest {
             /* Write edges *************************************************** */
             for (Task t : tasks) {
                 Set<AbstractTask> successors = new HashSet<>();
-                successors.addAll(t.getSuccessors());
+                boolean done = false;
+                while (!done) {
+                    try {
+                        successors.addAll(t.getSuccessors());
+                        done = true;
+                    } catch (ConcurrentModificationException cme) {
+                        successors.clear();
+                    }
+                }
                 for (AbstractTask t2 : successors) {
                     this.graph.write(prefix + t.getId() + " -> " + t2.getId() + ";");
                     this.graph.newLine();

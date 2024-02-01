@@ -1,5 +1,5 @@
 /*
- *  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+ *  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import es.bsc.compss.types.tracing.SystemComposition;
 
 public class PRVNode extends SystemComposition<CPU> {
 
-    private final int nodeId;
+    private int nodeId;
 
 
     public PRVNode(int nodeId, String label) {
@@ -47,5 +47,9 @@ public class PRVNode extends SystemComposition<CPU> {
             s.append(component.print(pad + "\t"));
         }
         return s.toString();
+    }
+
+    public void applyOffset(int nodeOffset) {
+        nodeId = this.nodeId + nodeOffset;
     }
 }

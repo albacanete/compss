@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-#  Copyright 2002-2022 Barcelona Supercomputing Center (www.bsc.es)
+#  Copyright 2002-2023 Barcelona Supercomputing Center (www.bsc.es)
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ def is_cache_enabled(cache_config: str) -> bool:
     :param cache_config: Cache configuration defined on startup.
     :return: True if enabled, False otherwise. And size if enabled.
     """
-    return cache_config.lower() != "false"
+    return cache_config.lower() not in ["false", "null"]
 
 
 def start_cache(
