@@ -485,7 +485,8 @@ def executor(
         pipe.write(TAGS.quit)
         pipe.close()
     except Exception as general_exception:  # pylint: disable=broad-except
-        logger.error(general_exception)
+        sys.stderr.write(f"\n{str(general_exception)}\n")
+        sys.stderr.flush()
         raise general_exception from general_exception
 
 
@@ -689,6 +690,7 @@ def process_task(
 
         # Setting working directory
         os.chdir(working_dir)
+        GLOBALS.set_temporary_directory(working_dir)
 
         if __debug__:
             logger.debug(
@@ -869,6 +871,7 @@ def process_task(
             OT.clean_object_tracker(hard_stop=True)
             # Go back to initial current working directory
             os.chdir(current_working_dir)
+            GLOBALS.set_temporary_directory(current_working_dir)
             # Stop the worker process
             return False
 
@@ -919,6 +922,7 @@ def process_task(
         pipe.write(message)
         # Go back to original working directory
         os.chdir(current_working_dir)
+        GLOBALS.set_temporary_directory(current_working_dir)
         return True
 
 

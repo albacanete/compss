@@ -24,14 +24,13 @@ import es.bsc.compss.types.data.DataAccessId;
 import es.bsc.compss.types.data.DataAccessId.ReadingDataAccessId;
 import es.bsc.compss.types.data.DataAccessId.WritingDataAccessId;
 import es.bsc.compss.types.data.DataInstanceId;
-import es.bsc.compss.types.data.DataParams.ObjectData;
 import es.bsc.compss.types.data.LogicalData;
-
 import es.bsc.compss.types.data.accessparams.ObjectAccessParams;
 import es.bsc.compss.types.data.location.DataLocation;
 import es.bsc.compss.types.data.location.ProtocolType;
 import es.bsc.compss.types.data.operation.ObjectTransferable;
 import es.bsc.compss.types.data.operation.OneOpWithSemListener;
+import es.bsc.compss.types.data.params.ObjectData;
 import es.bsc.compss.types.uri.SimpleURI;
 import es.bsc.compss.util.ErrorManager;
 import java.util.concurrent.Semaphore;
@@ -106,7 +105,7 @@ public class ObjectMainAccess<V extends Object, D extends ObjectData, P extends 
 
     private V fetchObject(LogicalData ld, DataAccessId daId, String sourceName) throws CannotLoadException {
         if (ld.isInMemory()) {
-            if (!daId.isPreserveSourceData()) {
+            if (!daId.isPreserveSourceData() && ld.getKnownAlias().size() == 1) {
                 return (V) ld.removeValue();
             } else {
                 try {

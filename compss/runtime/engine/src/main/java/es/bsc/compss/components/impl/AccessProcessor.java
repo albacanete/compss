@@ -22,6 +22,7 @@ import es.bsc.compss.COMPSsDefaults;
 import es.bsc.compss.api.TaskMonitor;
 import es.bsc.compss.checkpoint.CheckpointManager;
 import es.bsc.compss.components.monitor.impl.GraphGenerator;
+import es.bsc.compss.components.monitor.impl.GraphHandler;
 import es.bsc.compss.log.Loggers;
 import es.bsc.compss.types.AbstractTask;
 import es.bsc.compss.types.Application;
@@ -31,11 +32,11 @@ import es.bsc.compss.types.annotations.parameter.OnFailure;
 import es.bsc.compss.types.data.DataAccessId;
 import es.bsc.compss.types.data.DataAccessId.WritingDataAccessId;
 import es.bsc.compss.types.data.DataInstanceId;
-import es.bsc.compss.types.data.DataParams;
 import es.bsc.compss.types.data.LogicalData;
 import es.bsc.compss.types.data.ResultFile;
 import es.bsc.compss.types.data.access.MainAccess;
 import es.bsc.compss.types.data.accessparams.AccessParams;
+import es.bsc.compss.types.data.params.DataParams;
 import es.bsc.compss.types.parameter.impl.Parameter;
 import es.bsc.compss.types.request.ap.APRequest;
 import es.bsc.compss.types.request.ap.AlreadyAccessedRequest;
@@ -147,12 +148,12 @@ public class AccessProcessor implements Runnable, CheckpointManager.User {
     }
 
     /**
-     * Sets the GraphGenerator co-worker.
+     * Sets the GraphHandler.
      *
-     * @param gm co-worker.
+     * @param gh graphandler.
      */
-    public void setGM(GraphGenerator gm) {
-        this.taskAnalyser.setGM(gm);
+    public void setGM(GraphHandler gh) {
+        this.taskAnalyser.setGM(gh);
     }
 
     @Override
@@ -482,8 +483,8 @@ public class AccessProcessor implements Runnable, CheckpointManager.User {
      * @param groupName Name of the task group
      * @param app Application.
      */
-    public void setCurrentTaskGroup(String groupName, boolean implicitBarrier, Application app) {
-        OpenTaskGroupRequest request = new OpenTaskGroupRequest(groupName, implicitBarrier, app);
+    public void setCurrentTaskGroup(String groupName, Application app) {
+        OpenTaskGroupRequest request = new OpenTaskGroupRequest(groupName, app);
         if (!requestQueue.offer(request)) {
             ErrorManager.error(ERROR_QUEUE_OFFER + "new task group");
         }

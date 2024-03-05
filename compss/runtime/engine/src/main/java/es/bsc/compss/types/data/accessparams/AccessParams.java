@@ -20,8 +20,8 @@ import es.bsc.compss.components.impl.DataInfoProvider;
 import es.bsc.compss.log.Loggers;
 import es.bsc.compss.types.Application;
 import es.bsc.compss.types.annotations.parameter.Direction;
-import es.bsc.compss.types.data.DataInfo;
-import es.bsc.compss.types.data.DataParams;
+import es.bsc.compss.types.data.info.DataInfo;
+import es.bsc.compss.types.data.params.DataParams;
 import es.bsc.compss.types.request.exceptions.ValueUnawareRuntimeException;
 
 import java.io.Serializable;
@@ -117,8 +117,12 @@ public abstract class AccessParams<D extends DataParams> implements Serializable
         return this.mode;
     }
 
-    public Integer getDataId(DataInfoProvider dip) {
-        return data.getDataId(dip);
+    public DataInfo getDataInfo() {
+        return data.getDataInfo();
+    }
+
+    public Integer getDataId() {
+        return data.getDataId();
     }
 
     public String getDataDescription() {
